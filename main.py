@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from routes import health, token, memory
+from routes import health, token, memory, models
 from config import settings
 
 # Configure logging
@@ -67,6 +67,7 @@ app.add_middleware(
 app.include_router(health.router, tags=["Health"])
 app.include_router(token.router, prefix="/token", tags=["Token"])
 app.include_router(memory.router, prefix="/memory", tags=["Memory"])
+app.include_router(models.router, prefix="/models", tags=["Models"])
 
 
 def run():

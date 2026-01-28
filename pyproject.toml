@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "livekit-api>=1.0.0",
+    "livekit-agents>=1.0.0",
     "python-dotenv>=1.0.0",
     "zep-cloud>=3.0.0",
     "PyJWT>=2.8.0",
