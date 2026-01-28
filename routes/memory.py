@@ -1,7 +1,8 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel
 from zep_cloud.client import AsyncZep
 
 from config import settings
@@ -9,6 +10,57 @@ from auth import require_auth, check_user_access, AuthUser
 
 router = APIRouter()
 logger = logging.getLogger("kwami-api.memory")
+
+
+# =============================================================================
+# Pydantic Models for Ontology
+# =============================================================================
+
+class EntityTypeDefinition(BaseModel):
+    """Definition of an entity type for the knowledge graph."""
+    name: str
+    description: str
+
+
+class EdgeTypeDefinition(BaseModel):
+    """Definition of an edge (relationship) type for the knowledge graph."""
+    name: str
+    description: str
+
+
+class OntologySchema(BaseModel):
+    """Full ontology schema with entity and edge types."""
+    entity_types: list[EntityTypeDefinition]
+    edge_types: list[EdgeTypeDefinition]
+
+
+# Default ontology for Kwami agents
+DEFAULT_ENTITY_TYPES = [
+    {"name": "Preference", "description": "User preferences, choices, opinions, or selections."},
+    {"name": "Procedure", "description": "Multi-step instructions or workflows."},
+    {"name": "Person", "description": "People mentioned in conversation."},
+    {"name": "Organization", "description": "Companies, institutions, teams, or groups."},
+    {"name": "Location", "description": "Physical places, cities, countries, venues."},
+    {"name": "Event", "description": "Scheduled or past events, meetings, appointments."},
+    {"name": "Project", "description": "Work projects, personal initiatives, creative endeavors."},
+    {"name": "Topic", "description": "Subjects of interest or discussion themes."},
+    {"name": "Product", "description": "Products, services, software, or tools."},
+    {"name": "Skill", "description": "User skills, expertise, or competencies."},
+    {"name": "Goal", "description": "User goals, objectives, or aspirations."},
+]
+
+DEFAULT_EDGE_TYPES = [
+    {"name": "KNOWS", "description": "The user knows a person."},
+    {"name": "WORKS_AT", "description": "Employment relationship with an organization."},
+    {"name": "LIVES_IN", "description": "The user's residence or location."},
+    {"name": "INTERESTED_IN", "description": "Topics or things the user is interested in."},
+    {"name": "WORKING_ON", "description": "Projects the user is actively working on."},
+    {"name": "HAS_SKILL", "description": "Skills the user possesses."},
+    {"name": "WANTS_TO", "description": "Goals or desires the user has expressed."},
+    {"name": "ATTENDED", "description": "Events the user has attended or will attend."},
+    {"name": "USES", "description": "Products or tools the user uses."},
+    {"name": "PREFERS", "description": "Preferences the user has expressed."},
+]
 
 
 async def get_zep_client():
@@ -377,6 +429,365 @@ async def get_user_nodes(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{user_id}/ontology")
+async def get_user_ontology(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
+    """Get the ontology (entity/edge type schema) for a user's knowledge graph.
+    
+    Returns the configured entity types and edge types that Zep uses
+    for extracting information from conversations.
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"📋 Fetching ontology for user: {user_id}")
+    
+    try:
+        ontology = await client.graph.get_ontology(user_id=user_id)
+        
+        if ontology:
+            return {
+                "user_id": user_id,
+                "entity_types": [
+                    {"name": e.name, "description": e.description}
+                    for e in (ontology.entity_types or [])
+                ],
+                "edge_types": [
+                    {"name": e.name, "description": e.description}
+                    for e in (ontology.edge_types or [])
+                ],
+            }
+        else:
+            # Return defaults if no ontology configured
+            return {
+                "user_id": user_id,
+                "entity_types": DEFAULT_ENTITY_TYPES,
+                "edge_types": DEFAULT_EDGE_TYPES,
+                "is_default": True,
+            }
+            
+    except Exception as e:
+        error_msg = str(e)
+        if "404" in error_msg:
+            # No ontology configured, return defaults
+            return {
+                "user_id": user_id,
+                "entity_types": DEFAULT_ENTITY_TYPES,
+                "edge_types": DEFAULT_EDGE_TYPES,
+                "is_default": True,
+            }
+        logger.error(f"Failed to fetch ontology: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/{user_id}/ontology")
+async def set_user_ontology(
+    user_id: str,
+    ontology: OntologySchema,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
+    """Set the ontology (entity/edge type schema) for a user's knowledge graph.
+    
+    This configures what types of entities and relationships Zep will
+    extract from conversations. Changes apply to future extractions.
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"📋 Setting ontology for user: {user_id}")
+    
+    try:
+        await client.graph.set_ontology(
+            user_id=user_id,
+            entity_types=[e.model_dump() for e in ontology.entity_types],
+            edge_types=[e.model_dump() for e in ontology.edge_types],
+        )
+        
+        logger.info(
+            f"📋 Ontology set: {len(ontology.entity_types)} entity types, "
+            f"{len(ontology.edge_types)} edge types"
+        )
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "entity_types_count": len(ontology.entity_types),
+            "edge_types_count": len(ontology.edge_types),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to set ontology: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{user_id}/ontology/reset")
+async def reset_user_ontology(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
+    """Reset the ontology to default Kwami entity/edge types."""
+    verify_user_access(user, user_id)
+    logger.info(f"📋 Resetting ontology to defaults for user: {user_id}")
+    
+    try:
+        await client.graph.set_ontology(
+            user_id=user_id,
+            entity_types=DEFAULT_ENTITY_TYPES,
+            edge_types=DEFAULT_EDGE_TYPES,
+        )
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "message": "Ontology reset to defaults",
+            "entity_types_count": len(DEFAULT_ENTITY_TYPES),
+            "edge_types_count": len(DEFAULT_EDGE_TYPES),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to reset ontology: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{user_id}/search")
+async def search_graph(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    q: str = Query(..., description="Search query"),
+    scope: str = Query("nodes", description="Search scope: 'nodes', 'edges', or 'both'"),
+    entity_types: Optional[str] = Query(None, description="Comma-separated entity types to filter by"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Search the knowledge graph with optional entity type filtering.
+    
+    This allows precise queries like "find all Preference entities about food"
+    or "find Person entities named John".
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"🔍 Searching graph for user {user_id}: query='{q}', scope={scope}, types={entity_types}")
+    
+    try:
+        results = {"nodes": [], "edges": [], "query": q, "scope": scope}
+        
+        # Parse entity types filter
+        node_labels = None
+        if entity_types:
+            node_labels = [t.strip() for t in entity_types.split(",") if t.strip()]
+        
+        # Search nodes
+        if scope in ("nodes", "both"):
+            try:
+                search_kwargs = {
+                    "user_id": user_id,
+                    "query": q,
+                    "scope": "nodes",
+                    "limit": limit,
+                }
+                if node_labels:
+                    search_kwargs["node_labels"] = node_labels
+                    
+                nodes_response = await client.graph.search(**search_kwargs)
+                
+                if nodes_response and nodes_response.nodes:
+                    for node in nodes_response.nodes:
+                        results["nodes"].append({
+                            "name": getattr(node, 'name', ''),
+                            "type": node.labels[0].lower() if hasattr(node, 'labels') and node.labels else 'entity',
+                            "labels": list(node.labels) if hasattr(node, 'labels') and node.labels else [],
+                            "summary": getattr(node, 'summary', ''),
+                            "uuid": getattr(node, 'uuid_', None) or getattr(node, 'uuid', None),
+                            "score": getattr(node, 'score', 0),
+                        })
+            except Exception as e:
+                logger.warning(f"🔍 Node search failed: {e}")
+        
+        # Search edges
+        if scope in ("edges", "both"):
+            try:
+                edges_response = await client.graph.search(
+                    user_id=user_id,
+                    query=q,
+                    scope="edges",
+                    limit=limit,
+                )
+                
+                if edges_response and edges_response.edges:
+                    for edge in edges_response.edges:
+                        results["edges"].append({
+                            "fact": getattr(edge, 'fact', ''),
+                            "relation": getattr(edge, 'name', 'related_to'),
+                            "uuid": getattr(edge, 'uuid_', None) or getattr(edge, 'uuid', None),
+                            "score": getattr(edge, 'score', 0),
+                        })
+            except Exception as e:
+                logger.warning(f"🔍 Edge search failed: {e}")
+        
+        results["node_count"] = len(results["nodes"])
+        results["edge_count"] = len(results["edges"])
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Failed to search graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{user_id}/entities/{entity_type}")
+async def get_entities_by_type(
+    user_id: str,
+    entity_type: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    limit: int = Query(50, ge=1, le=100),
+):
+    """Get all entities of a specific type from the knowledge graph.
+    
+    Examples:
+    - GET /memory/{user_id}/entities/Preference - Get all user preferences
+    - GET /memory/{user_id}/entities/Person - Get all people mentioned
+    - GET /memory/{user_id}/entities/Location - Get all locations
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"🏷️ Fetching {entity_type} entities for user: {user_id}")
+    
+    try:
+        entities = []
+        
+        # Get all nodes and filter by type
+        nodes_response = await client.graph.node.get_by_user_id(
+            user_id=user_id,
+            limit=limit * 2,  # Get more to filter
+        )
+        
+        if nodes_response:
+            for node in nodes_response:
+                node_labels = list(node.labels) if hasattr(node, 'labels') and node.labels else []
+                # Check if the entity type matches (case-insensitive)
+                if any(label.lower() == entity_type.lower() for label in node_labels):
+                    entities.append({
+                        "name": getattr(node, 'name', ''),
+                        "type": node_labels[0] if node_labels else 'entity',
+                        "labels": node_labels,
+                        "summary": getattr(node, 'summary', ''),
+                        "uuid": getattr(node, 'uuid_', None) or getattr(node, 'uuid', None),
+                        "created_at": str(node.created_at) if hasattr(node, 'created_at') and node.created_at else None,
+                    })
+                    if len(entities) >= limit:
+                        break
+        
+        return {
+            "entity_type": entity_type,
+            "entities": entities,
+            "count": len(entities),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch entities by type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _infer_node_type(name: str, summary: str | None, labels: list[str]) -> str:
+    """Infer node type from Zep labels or fall back to keyword-based inference.
+    
+    Zep's free tier often returns generic labels, so we use smart inference.
+    """
+    # First, check if Zep provided a meaningful label
+    if labels:
+        label = labels[0].lower()
+        # If it's a specific type (not generic), use it
+        if label not in ("entity", "node", "unknown", ""):
+            return label
+    
+    # Fall back to keyword-based inference
+    name_lower = name.lower()
+    text = f"{name_lower} {(summary or '').lower()}"
+    
+    # User/Assistant detection (highest priority)
+    if "kwami_" in name_lower or name_lower == "user" or "identifies_as" in text:
+        return "user"
+    if name_lower in ("assistant", "ai", "bot") or "assistant" in name_lower:
+        return "assistant"
+    
+    # Person detection
+    person_indicators = ["person", "he ", "she ", "they ", "friend", "family", 
+                        "brother", "sister", "mother", "father", "wife", "husband",
+                        "colleague", "boss", "manager"]
+    if any(p in text for p in person_indicators):
+        return "person"
+    
+    # Pet/Animal detection
+    pet_indicators = ["dog", "cat", "pet", "puppy", "kitten", "bird", "fish",
+                     "labrador", "retriever", "shepherd", "poodle", "bulldog"]
+    if any(p in text for p in pet_indicators):
+        return "pet"
+    
+    # Location detection
+    location_indicators = ["city", "country", "location", "lives in", "from", "born in",
+                          "street", "address", "neighborhood", "district", "region",
+                          "barcelona", "madrid", "london", "paris", "new york", "tokyo"]
+    if any(loc in text for loc in location_indicators):
+        return "location"
+    
+    # Place/Venue detection (more specific than location)
+    place_indicators = ["park", "home", "house", "apartment", "office", "restaurant",
+                       "café", "cafe", "bar", "gym", "school", "university", "hospital",
+                       "store", "shop", "mall", "airport", "station"]
+    if any(p in text for p in place_indicators):
+        return "place"
+    
+    # Preference detection
+    preference_indicators = ["likes", "loves", "enjoys", "prefers", "favorite", 
+                            "favourite", "preference", "interested in", "passionate"]
+    if any(p in text for p in preference_indicators):
+        return "preference"
+    
+    # Skill/Profession detection
+    skill_indicators = ["developer", "engineer", "designer", "artist", "musician",
+                       "programmer", "software", "works as", "profession", "job",
+                       "skill", "expertise", "experience in"]
+    if any(s in text for s in skill_indicators):
+        return "skill"
+    
+    # Topic/Interest detection
+    topic_indicators = ["music", "sports", "art", "technology", "science", "cooking",
+                       "gaming", "reading", "travel", "photography", "genre"]
+    if any(t in text for t in topic_indicators):
+        return "topic"
+    
+    # Event detection
+    event_indicators = ["event", "meeting", "appointment", "birthday", "anniversary",
+                       "conference", "party", "wedding", "trip", "vacation"]
+    if any(e in text for e in event_indicators):
+        return "event"
+    
+    # Project detection
+    project_indicators = ["project", "working on", "building", "developing", "creating"]
+    if any(p in text for p in project_indicators):
+        return "project"
+    
+    # Product detection
+    product_indicators = ["product", "app", "application", "tool", "service", "device"]
+    if any(p in text for p in product_indicators):
+        return "product"
+    
+    # Organization detection
+    org_indicators = ["company", "organization", "team", "group", "corporation",
+                     "startup", "business", "firm", "agency"]
+    if any(o in text for o in org_indicators):
+        return "organization"
+    
+    # Attribute/Property detection (colors, ages, etc.)
+    if any(c in text for c in ["color", "colour", "brown", "black", "white", "red", "blue"]):
+        return "attribute"
+    if any(a in text for a in ["years old", "age", "height", "weight"]):
+        return "attribute"
+    
+    # Default
+    return "entity"
+
+
 @router.get("/{user_id}/graph")
 async def get_memory_graph(
     user_id: str,
@@ -384,135 +795,121 @@ async def get_memory_graph(
     client: AsyncZep = Depends(get_zep_client),
     limit: int = 50,
 ):
-    """Get the knowledge graph representation of the user's memory from Zep."""
+    """Get the knowledge graph representation of the user's memory from Zep.
+    
+    Uses Zep entity labels when available, with smart keyword inference as fallback.
+    """
     verify_user_access(user, user_id)
     logger.info(f"📊 Fetching memory graph for user: {user_id}")
     try:
         nodes = []
         edges = []
-        node_map = {}  # Track nodes by name to avoid duplicates
         graph_edges_raw = []  # Store raw edges for relationship building
         
-        # 1. Get edges via graph.search (for relationships)
+        # 1. Get edges via graph API (for relationships)
         try:
-            facts_response = await client.graph.search(
-                user_id=user_id,
-                query="*",  # Broader search
-                scope="edges",
-                limit=limit,
-            )
-            if facts_response and facts_response.edges:
-                logger.info(f"📊 Got {len(facts_response.edges)} edges from graph.search")
-                for edge in facts_response.edges:
+            edges_response = await client.graph.edge.get_by_user_id(user_id=user_id, limit=limit)
+            if edges_response:
+                logger.info(f"📊 Got {len(edges_response)} edges from graph.edge")
+                for edge in edges_response:
                     edge_data = {
-                        "fact": edge.fact if hasattr(edge, 'fact') else None,
-                        "relation": edge.name if hasattr(edge, 'name') else "related_to",
-                        "source_node": edge.source_node_uuid if hasattr(edge, 'source_node_uuid') else None,
-                        "target_node": edge.target_node_uuid if hasattr(edge, 'target_node_uuid') else None,
+                        "fact": getattr(edge, 'fact', None),
+                        "relation": getattr(edge, 'name', 'related_to'),
+                        "source_node": getattr(edge, 'source_node_uuid', None),
+                        "target_node": getattr(edge, 'target_node_uuid', None),
                     }
                     graph_edges_raw.append(edge_data)
         except Exception as e:
-            logger.warning(f"📊 graph.search edges failed: {e}")
+            logger.warning(f"📊 graph.edge failed, trying search: {e}")
+            # Fallback to graph.search
+            try:
+                facts_response = await client.graph.search(
+                    user_id=user_id,
+                    query="*",
+                    scope="edges",
+                    limit=limit,
+                )
+                if facts_response and facts_response.edges:
+                    for edge in facts_response.edges:
+                        edge_data = {
+                            "fact": getattr(edge, 'fact', None),
+                            "relation": getattr(edge, 'name', 'related_to'),
+                            "source_node": getattr(edge, 'source_node_uuid', None),
+                            "target_node": getattr(edge, 'target_node_uuid', None),
+                        }
+                        graph_edges_raw.append(edge_data)
+            except Exception as search_e:
+                logger.warning(f"📊 graph.search edges also failed: {search_e}")
         
         # 2. Get nodes (entities) from graph.node API
         entity_nodes = []
+        user_node_uuid = None  # Track the user/kwami node
+        
         try:
             nodes_response = await client.graph.node.get_by_user_id(user_id=user_id, limit=limit)
             if nodes_response:
                 logger.info(f"📊 Got {len(nodes_response)} nodes from graph.node")
                 for node in nodes_response:
-                    node_name = node.name if hasattr(node, 'name') else "Unknown"
-                    node_type = node.labels[0].lower() if hasattr(node, 'labels') and node.labels else "entity"
-                    # Note: Zep uses uuid_ not uuid
-                    node_uuid = node.uuid_ if hasattr(node, 'uuid_') else (node.uuid if hasattr(node, 'uuid') else None)
-                    # created_at is already a string from Zep
+                    node_name = getattr(node, 'name', 'Unknown')
+                    node_labels = list(node.labels) if hasattr(node, 'labels') and node.labels else []
+                    node_uuid = getattr(node, 'uuid_', None) or getattr(node, 'uuid', None)
                     created_at = node.created_at if hasattr(node, 'created_at') else None
+                    node_summary = getattr(node, 'summary', None)
+                    
+                    # Infer type using labels + keyword analysis
+                    node_type = _infer_node_type(node_name, node_summary, node_labels)
+                    
+                    # Detect the user/kwami node
+                    if node_type == "user" or "kwami_" in node_name.lower():
+                        user_node_uuid = node_uuid
+                        node_type = "user"
+                    
                     entity_nodes.append({
                         "name": node_name,
                         "type": node_type,
-                        "summary": node.summary if hasattr(node, 'summary') else None,
+                        "summary": node_summary,
                         "uuid": node_uuid,
                         "created_at": created_at,
-                        "labels": list(node.labels) if hasattr(node, 'labels') and node.labels else [],
+                        "labels": node_labels,
                     })
         except Exception as e:
             logger.warning(f"📊 graph.node failed: {e}")
         
-        # 3. Fallback: Try getting facts from a broader search if no nodes found
-        if not entity_nodes:
-            logger.info("📊 No nodes found, trying broader fact search...")
-            try:
-                # Try multiple search queries
-                for query in ["user", "information", "facts", "preferences", "personal"]:
-                    facts_response = await client.graph.search(
-                        user_id=user_id,
-                        query=query,
-                        scope="edges",
-                        limit=limit,
-                    )
-                    if facts_response and facts_response.edges:
-                        logger.info(f"📊 Found {len(facts_response.edges)} edges with query '{query}'")
-                        for edge in facts_response.edges:
-                            if hasattr(edge, 'fact') and edge.fact:
-                                fact_text = edge.fact
-                                # Create a pseudo-node from the fact
-                                if fact_text not in [e.get("name") for e in entity_nodes]:
-                                    entity_nodes.append({
-                                        "name": fact_text[:60] + "..." if len(fact_text) > 60 else fact_text,
-                                        "type": "fact",
-                                        "summary": fact_text,
-                                        "uuid": None,
-                                        "created_at": None,
-                                        "labels": ["Fact"],
-                                    })
-                        if entity_nodes:
-                            break  # Found some data, stop searching
-            except Exception as e:
-                logger.warning(f"📊 Fallback fact search failed: {e}")
-        
-        # 4. Build the visualization graph
-        # Add central user node
-        nodes.append({
-            "id": "user",
-            "label": "User",
-            "type": "user",
-            "val": 25
-        })
-        node_map["user"] = "user"
-        
+        # 3. Build the visualization graph
         # Map UUIDs to node IDs for edge building
         uuid_to_id = {}
+        user_node_id = None
         
-        # Add entity nodes
+        # Add entity nodes with inferred types
         for i, entity in enumerate(entity_nodes):
             node_id = f"entity_{i}"
-            node_map[entity["name"].lower()] = node_id
             if entity.get("uuid"):
                 uuid_to_id[entity["uuid"]] = node_id
             
-            # Infer better type from name/content
-            node_type = entity["type"]
-            name_lower = entity["name"].lower()
-            if any(w in name_lower for w in ["music", "hip hop", "rock", "jazz", "likes", "loves", "enjoys"]):
-                node_type = "preference"
-            elif any(w in name_lower for w in ["years old", "age", "born"]):
-                node_type = "attribute"
-            elif any(w in name_lower for w in ["city", "country", "location", "lives", "from"]):
-                node_type = "location"
+            # Track user node for potential edge connections
+            if entity["type"] == "user":
+                user_node_id = node_id
+            
+            # Shorten display label for user nodes
+            label = entity["name"]
+            if entity["type"] == "user" and len(label) > 20:
+                label = "User"  # Cleaner display
             
             nodes.append({
                 "id": node_id,
-                "label": entity["name"],
-                "type": node_type,
+                "label": label,
+                "type": entity["type"],
                 "summary": entity["summary"],
                 "uuid": entity["uuid"],
                 "created_at": entity["created_at"],
                 "labels": entity["labels"],
-                "val": 15
+                "val": 25 if entity["type"] == "user" else 15
             })
         
-        # 5. Build edges from raw graph edges (actual relationships)
+        # 4. Build edges from raw graph edges (actual relationships)
         edges_added = set()
+        connected_nodes = set()  # Track which nodes are connected
+        
         for raw_edge in graph_edges_raw:
             source_uuid = raw_edge.get("source_node")
             target_uuid = raw_edge.get("target_node")
@@ -530,16 +927,18 @@ async def get_memory_graph(
                         "relation": relation
                     })
                     edges_added.add(edge_key)
+                    connected_nodes.add(source_id)
+                    connected_nodes.add(target_id)
         
-        # 6. If no edges from graph, connect all nodes to user
-        if not edges and len(nodes) > 1:
-            logger.info("📊 No graph edges found, connecting nodes to user")
-            for i, node in enumerate(nodes[1:], start=0):  # Skip user node
-                edges.append({
-                    "source": "user",
-                    "target": node["id"],
-                    "relation": "has"
-                })
+        # 5. Connect orphan nodes to user node if we have one
+        if user_node_id:
+            for node in nodes:
+                if node["id"] != user_node_id and node["id"] not in connected_nodes:
+                    edges.append({
+                        "source": user_node_id,
+                        "target": node["id"],
+                        "relation": "related_to"
+                    })
         
         logger.info(f"📊 Final graph: {len(nodes)} nodes, {len(edges)} edges")
         return {"nodes": nodes, "edges": edges}

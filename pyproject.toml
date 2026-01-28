@@ -14,6 +14,19 @@ dependencies = [
     "zep-cloud>=3.0.0",
     "PyJWT>=2.8.0",
     "cryptography>=42.0.0",
+    # LiveKit plugins for model definitions extraction
+    "livekit-plugins-openai>=1.0.0",
+    "livekit-plugins-anthropic>=1.0.0",
+    "livekit-plugins-google>=1.0.0",
+    "livekit-plugins-deepgram>=1.0.0",
+    "livekit-plugins-elevenlabs>=1.0.0",
+    "livekit-plugins-cartesia>=1.0.0",
+    "livekit-plugins-groq>=1.0.0",
+    "livekit-plugins-mistralai>=1.0.0",
+    "livekit-plugins-rime>=1.0.0",
+    "livekit-plugins-silero>=1.0.0",
+    # Note: AWS plugin requires aws-sdk-bedrock-runtime for full functionality
+    # Model listing uses fallback, so plugin is optional
 ]
 
 [project.optional-dependencies]
