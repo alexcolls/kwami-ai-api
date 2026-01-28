@@ -42,9 +42,26 @@ class Settings(BaseSettings):
     # Memory
     zep_api_key: str | None = Field(default=None, alias="ZEP_API_KEY")
 
+    # Supabase Auth
+    supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
+    supabase_jwt_secret: str | None = Field(default=None, alias="SUPABASE_JWT_SECRET")
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+    
+    @property
+    def auth_enabled(self) -> bool:
+        """Check if authentication is configured."""
+        return self.supabase_url is not None or self.supabase_jwt_secret is not None
+    
+    @computed_field
+    @property
+    def supabase_jwks_url(self) -> str | None:
+        """Get JWKS URL for Supabase project."""
+        if self.supabase_url:
+            return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+        return None
 
 
 @lru_cache

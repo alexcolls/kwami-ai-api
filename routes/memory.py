@@ -1,20 +1,38 @@
 import logging
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict, Any, Optional
 from zep_cloud.client import AsyncZep
+
 from config import settings
+from auth import require_auth, check_user_access, AuthUser
 
 router = APIRouter()
 logger = logging.getLogger("kwami-api.memory")
+
 
 async def get_zep_client():
     if not settings.zep_api_key:
         raise HTTPException(status_code=503, detail="Memory service not configured (ZEP_API_KEY missing)")
     return AsyncZep(api_key=settings.zep_api_key)
 
+
+def verify_user_access(user: AuthUser, user_id: str):
+    """Verify the authenticated user has access to the requested user_id."""
+    if not check_user_access(user, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: You can only access your own memory data"
+        )
+
 @router.get("/debug/{user_id}")
-async def debug_user_memory(user_id: str, client: AsyncZep = Depends(get_zep_client)):
+async def debug_user_memory(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
     """Debug endpoint to check what memory exists for a user."""
+    verify_user_access(user, user_id)
     result = {
         "user_id": user_id, 
         "facts": [], 
@@ -82,8 +100,13 @@ async def debug_user_memory(user_id: str, client: AsyncZep = Depends(get_zep_cli
 
 
 @router.get("/{user_id}/facts")
-async def get_user_facts(user_id: str, client: AsyncZep = Depends(get_zep_client)):
+async def get_user_facts(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
     """Get all facts stored for a user via graph search (Zep v3)."""
+    verify_user_access(user, user_id)
     try:
         # Zep v3 stores facts on graph edges - search for them
         facts_response = await client.graph.search(
@@ -103,7 +126,11 @@ async def get_user_facts(user_id: str, client: AsyncZep = Depends(get_zep_client
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{user_id}")
-async def delete_user_memory(user_id: str, client: AsyncZep = Depends(get_zep_client)):
+async def delete_user_memory(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
     """Delete all memory for a user (user, threads, and graph data).
     
     This is a destructive operation that removes:
@@ -112,7 +139,9 @@ async def delete_user_memory(user_id: str, client: AsyncZep = Depends(get_zep_cl
     - The user record itself
     
     Use with caution - this cannot be undone.
+    Requires authentication when auth is enabled.
     """
+    verify_user_access(user, user_id)
     logger.info(f"🗑️ Deleting all memory for user: {user_id}")
     deleted = {"threads": 0, "user": False, "errors": []}
     
@@ -164,12 +193,18 @@ async def delete_user_memory(user_id: str, client: AsyncZep = Depends(get_zep_cl
 
 
 @router.get("/{user_id}/messages")
-async def get_user_messages(user_id: str, limit: int = 100, client: AsyncZep = Depends(get_zep_client)):
+async def get_user_messages(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    limit: int = 100,
+):
     """Get conversation messages for a user from their threads/sessions.
     
     This retrieves actual conversation history stored in Zep threads,
     which is where chat messages are stored via memory.add().
     """
+    verify_user_access(user, user_id)
     logger.info(f"💬 Fetching messages for user: {user_id}")
     try:
         messages = []
@@ -230,7 +265,12 @@ async def get_user_messages(user_id: str, limit: int = 100, client: AsyncZep = D
 
 
 @router.get("/{user_id}/edges")
-async def get_user_edges(user_id: str, limit: int = 50, client: AsyncZep = Depends(get_zep_client)):
+async def get_user_edges(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    limit: int = 50,
+):
     """Get all edges (facts with temporal data) for a user.
     
     Edges represent facts/relationships in the knowledge graph. Each edge includes:
@@ -240,6 +280,7 @@ async def get_user_edges(user_id: str, limit: int = 50, client: AsyncZep = Depen
     - created_at: When Zep learned the fact
     - expired_at: When Zep learned the fact was no longer true
     """
+    verify_user_access(user, user_id)
     logger.info(f"🔗 Fetching edges for user: {user_id}")
     try:
         edges = []
@@ -296,7 +337,12 @@ async def get_user_edges(user_id: str, limit: int = 50, client: AsyncZep = Depen
 
 
 @router.get("/{user_id}/nodes")
-async def get_user_nodes(user_id: str, limit: int = 50, client: AsyncZep = Depends(get_zep_client)):
+async def get_user_nodes(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    limit: int = 50,
+):
     """Get all nodes (entities with summaries) for a user.
     
     Nodes represent entities in the knowledge graph. Each node includes:
@@ -304,6 +350,7 @@ async def get_user_nodes(user_id: str, limit: int = 50, client: AsyncZep = Depen
     - summary: AI-generated overview of the entity
     - labels: Type categorization
     """
+    verify_user_access(user, user_id)
     logger.info(f"🔵 Fetching nodes for user: {user_id}")
     try:
         nodes = []
@@ -331,8 +378,14 @@ async def get_user_nodes(user_id: str, limit: int = 50, client: AsyncZep = Depen
 
 
 @router.get("/{user_id}/graph")
-async def get_memory_graph(user_id: str, limit: int = 50, client: AsyncZep = Depends(get_zep_client)):
+async def get_memory_graph(
+    user_id: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+    limit: int = 50,
+):
     """Get the knowledge graph representation of the user's memory from Zep."""
+    verify_user_access(user, user_id)
     logger.info(f"📊 Fetching memory graph for user: {user_id}")
     try:
         nodes = []
