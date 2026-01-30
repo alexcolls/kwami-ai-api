@@ -1,21 +1,23 @@
 """Models information endpoints.
 
 Provides endpoints for:
-- Available models from LiveKit SDK (dynamically extracted from inference + plugins)
+- LiveKit Inference models (from YAML config)
+- Plugin models (dynamically extracted from SDK)
 - Model pricing information
 - LLM metrics structure
 """
 
 import logging
+from pathlib import Path
 from typing import Literal, Any, Union, get_args, get_origin
 from enum import Enum
 
+import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from pricing import (
     ALL_PRICING,
-    LLM_PRICING,
     STT_PRICING,
     TTS_PRICING,
     REALTIME_PRICING,
@@ -25,13 +27,93 @@ from pricing import (
     RealtimePricing,
     get_model_pricing,
 )
+from model_metadata import (
+    get_model_metadata,
+    get_default_metadata,
+)
 
 logger = logging.getLogger("kwami-api.models")
 router = APIRouter()
 
 
 # =============================================================================
-# Helpers for extracting model definitions from LiveKit SDK
+# Load LiveKit Inference Models from YAML
+# =============================================================================
+
+def _load_inference_llm_models() -> list[dict]:
+    """Load LLM models from YAML configuration."""
+    yaml_path = Path(__file__).parent.parent / "livekit_inference_llm.yaml"
+    try:
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+            return data.get("models", [])
+    except Exception as e:
+        logger.error(f"Failed to load inference LLM config: {e}")
+        return []
+
+
+# Cache the loaded models
+_INFERENCE_LLM_MODELS: list[dict] | None = None
+
+
+def get_inference_llm_models() -> list[dict]:
+    """Get cached inference LLM models."""
+    global _INFERENCE_LLM_MODELS
+    if _INFERENCE_LLM_MODELS is None:
+        _INFERENCE_LLM_MODELS = _load_inference_llm_models()
+    return _INFERENCE_LLM_MODELS
+
+
+def _load_inference_stt_models() -> list[dict]:
+    """Load STT models from YAML configuration."""
+    yaml_path = Path(__file__).parent.parent / "livekit_inference_stt.yaml"
+    try:
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+            return data.get("models", [])
+    except Exception as e:
+        logger.error(f"Failed to load inference STT config: {e}")
+        return []
+
+
+# Cache the loaded STT models
+_INFERENCE_STT_MODELS: list[dict] | None = None
+
+
+def get_inference_stt_models() -> list[dict]:
+    """Get cached inference STT models."""
+    global _INFERENCE_STT_MODELS
+    if _INFERENCE_STT_MODELS is None:
+        _INFERENCE_STT_MODELS = _load_inference_stt_models()
+    return _INFERENCE_STT_MODELS
+
+
+def _load_inference_tts_models() -> list[dict]:
+    """Load TTS models from YAML configuration."""
+    yaml_path = Path(__file__).parent.parent / "livekit_inference_tts.yaml"
+    try:
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+            return data.get("models", [])
+    except Exception as e:
+        logger.error(f"Failed to load inference TTS config: {e}")
+        return []
+
+
+# Cache the loaded TTS models
+_INFERENCE_TTS_MODELS: list[dict] | None = None
+
+
+def get_inference_tts_models() -> list[dict]:
+    """Get cached inference TTS models."""
+    global _INFERENCE_TTS_MODELS
+    if _INFERENCE_TTS_MODELS is None:
+        _INFERENCE_TTS_MODELS = _load_inference_tts_models()
+    return _INFERENCE_TTS_MODELS
+
+
+# =============================================================================
+# Helpers for extracting model definitions from LiveKit SDK Plugins
 # =============================================================================
 
 def _extract_literal_values(type_hint: Any) -> list[str]:
@@ -70,51 +152,19 @@ def _safe_import_and_extract(module_path: str, type_name: str) -> list[str]:
 
 
 # =============================================================================
-# Model extraction functions (one per type)
+# Plugin extraction functions
 # =============================================================================
 
-def _get_llm_models() -> dict[str, Any]:
-    """Extract all LLM models from LiveKit SDK and plugins."""
-    inference = {}
+def _get_llm_plugin_models() -> dict[str, list[str]]:
+    """Extract LLM models from LiveKit plugins."""
     plugins = {}
-    source = "sdk"
     
-    # LiveKit Inference LLM
-    try:
-        from livekit.agents.inference.llm import (
-            OpenAIModels, GoogleModels, KimiModels, DeepSeekModels,
-        )
-        inference = {
-            "openai": _extract_literal_values(OpenAIModels),
-            "google": _extract_literal_values(GoogleModels),
-            "kimi": _extract_literal_values(KimiModels),
-            "deepseek": _extract_literal_values(DeepSeekModels),
-        }
-    except ImportError as e:
-        logger.warning(f"Could not import inference LLM models: {e}")
-        inference = {
-            "openai": [
-                "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
-                "openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano",
-                "openai/gpt-4o", "openai/gpt-4o-mini",
-            ],
-            "google": [
-                "google/gemini-2.5-pro", "google/gemini-2.5-flash",
-                "google/gemini-2.0-flash", "google/gemini-2.0-flash-lite",
-            ],
-            "kimi": ["moonshotai/kimi-k2-instruct"],
-            "deepseek": ["deepseek-ai/deepseek-v3"],
-        }
-        source = "fallback"
-    
-    # Plugin LLMs
     plugin_extractions = [
         ("openai", "livekit.plugins.openai.models", "ChatModels"),
         ("anthropic", "livekit.plugins.anthropic.models", "ChatModels"),
         ("google", "livekit.plugins.google.models", "ChatModels"),
         ("groq", "livekit.plugins.groq.models", "ChatModels"),
         ("mistralai", "livekit.plugins.mistralai.models", "ChatModels"),
-        # OpenAI-compatible providers
         ("cerebras", "livekit.plugins.openai.models", "CerebrasChatModels"),
         ("perplexity", "livekit.plugins.openai.models", "PerplexityChatModels"),
         ("xai", "livekit.plugins.openai.models", "XAIChatModels"),
@@ -130,7 +180,7 @@ def _get_llm_models() -> dict[str, Any]:
         if models:
             plugins[provider] = models
     
-    return {"inference": inference, "plugins": plugins, "source": source}
+    return plugins
 
 
 def _get_stt_models() -> dict[str, Any]:
@@ -139,7 +189,6 @@ def _get_stt_models() -> dict[str, Any]:
     plugins = {}
     source = "sdk"
     
-    # LiveKit Inference STT
     try:
         from livekit.agents.inference.stt import STTModels
         inference = _extract_literal_values(STTModels)
@@ -147,7 +196,6 @@ def _get_stt_models() -> dict[str, Any]:
         inference = []
         source = "fallback"
     
-    # Plugin STTs
     plugin_extractions = [
         ("deepgram", "livekit.plugins.deepgram.models", "DeepgramModels"),
         ("google", "livekit.plugins.google.models", "SpeechModels"),
@@ -171,7 +219,6 @@ def _get_tts_models() -> dict[str, Any]:
     plugins = {}
     source = "sdk"
     
-    # LiveKit Inference TTS
     try:
         from livekit.agents.inference.tts import TTSModels
         inference = _extract_literal_values(TTSModels)
@@ -179,7 +226,6 @@ def _get_tts_models() -> dict[str, Any]:
         inference = []
         source = "fallback"
     
-    # Plugin TTSs
     plugin_extractions = [
         ("openai", "livekit.plugins.openai.models", "TTSModels"),
         ("deepgram", "livekit.plugins.deepgram.models", "TTSModels"),
@@ -202,9 +248,7 @@ def _get_realtime_models() -> dict[str, Any]:
     """Extract all Realtime models from LiveKit SDK and plugins."""
     inference = []
     plugins = {}
-    source = "sdk"
     
-    # Plugin Realtime models
     openai_rt = _safe_import_and_extract("livekit.plugins.openai.models", "RealtimeModels")
     if openai_rt:
         plugins["openai"] = openai_rt
@@ -213,7 +257,6 @@ def _get_realtime_models() -> dict[str, Any]:
     if google_rt:
         plugins["google"] = google_rt
     
-    # AWS Nova Sonic (fallback since SDK needs extra dependencies)
     aws_rt = _safe_import_and_extract(
         "livekit.plugins.aws.experimental.realtime.types", "REALTIME_MODELS"
     )
@@ -221,7 +264,7 @@ def _get_realtime_models() -> dict[str, Any]:
         aws_rt = ["amazon.nova-sonic-v1:0", "amazon.nova-2-sonic-v1:0"]
     plugins["aws"] = aws_rt
     
-    return {"inference": inference, "plugins": plugins, "source": source}
+    return {"inference": inference, "plugins": plugins, "source": "sdk"}
 
 
 # =============================================================================
@@ -235,33 +278,142 @@ class ModelTypeEnum(str, Enum):
     realtime = "realtime"
 
 
-class ModelsResponse(BaseModel):
-    """Response for a single model type."""
-    source: Literal["sdk", "fallback"] = Field(
-        description="Whether models were extracted from SDK or using fallback"
-    )
-    inference: dict[str, list[str]] | list[str] = Field(
-        description="Models available via LiveKit Inference (hosted)"
-    )
-    plugins: dict[str, list[str]] = Field(
-        description="Models available via plugins (direct provider access)"
-    )
+class ProviderPricing(BaseModel):
+    """Pricing for a specific provider."""
+    input_per_1m: float
+    cached_per_1m: float | None = None
+    output_per_1m: float
 
 
-class PricingResponse(BaseModel):
-    """Response containing model pricing information."""
-    last_updated: str = Field(description="When pricing was last updated")
-    models: dict[str, ModelPricing] = Field(description="Pricing by model ID")
-
-
-class SingleModelPricingResponse(BaseModel):
-    """Response for a single model's pricing."""
+class InferenceModel(BaseModel):
+    """LiveKit Inference model with full metadata."""
     model_id: str
-    provider: str
-    model_type: str
     display_name: str
-    pricing: TokenPricing | AudioPricing | RealtimePricing
-    notes: str | None = None
+    provider: str
+    context_window: int
+    max_output: int | None = None
+    capabilities: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+    description: str | None = None
+    providers: dict[str, ProviderPricing] = {}
+
+
+class InferenceModelsResponse(BaseModel):
+    """Response for LiveKit Inference models."""
+    last_updated: str = Field(description="When the pricing/metadata was last updated")
+    models: list[InferenceModel] = Field(description="All available inference models")
+
+
+class PluginModel(BaseModel):
+    """Plugin model with metadata."""
+    model_id: str
+    display_name: str
+    provider: str
+    context_window: int
+    max_output: int | None = None
+    capabilities: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+
+
+class PluginModelsResponse(BaseModel):
+    """Response for plugin models."""
+    source: Literal["sdk", "fallback"]
+    providers: dict[str, list[PluginModel]]
+
+
+# STT Models
+class STTPricing(BaseModel):
+    """Pricing for STT model (per minute)."""
+    build_ship_per_min: float
+    scale_per_min: float
+
+
+class InferenceSTTModel(BaseModel):
+    """LiveKit Inference STT model with full metadata."""
+    model_id: str
+    display_name: str
+    provider: str
+    languages: list[str] = []
+    features: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+    description: str | None = None
+    pricing: STTPricing
+
+
+class InferenceSTTResponse(BaseModel):
+    """Response for LiveKit Inference STT models."""
+    last_updated: str = Field(description="When the pricing/metadata was last updated")
+    models: list[InferenceSTTModel] = Field(description="All available STT inference models")
+
+
+class PluginSTTModel(BaseModel):
+    """Plugin STT model with metadata."""
+    model_id: str
+    display_name: str
+    provider: str
+    languages: list[str] = []
+    features: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+
+
+class PluginSTTResponse(BaseModel):
+    """Response for STT plugin models."""
+    source: Literal["sdk", "fallback"]
+    providers: dict[str, list[PluginSTTModel]]
+
+
+# TTS Models
+class TTSPricing(BaseModel):
+    """Pricing for TTS model (per million characters)."""
+    build_ship_per_1m_chars: float
+    scale_per_1m_chars: float
+
+
+class InferenceTTSModel(BaseModel):
+    """LiveKit Inference TTS model with full metadata."""
+    model_id: str
+    display_name: str
+    provider: str
+    languages: list[str] = []
+    features: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+    description: str | None = None
+    pricing: TTSPricing
+
+
+class InferenceTTSResponse(BaseModel):
+    """Response for LiveKit Inference TTS models."""
+    last_updated: str = Field(description="When the pricing/metadata was last updated")
+    models: list[InferenceTTSModel] = Field(description="All available TTS inference models")
+
+
+class PluginTTSModel(BaseModel):
+    """Plugin TTS model with metadata."""
+    model_id: str
+    display_name: str
+    provider: str
+    languages: list[str] = []
+    features: list[str] = []
+    speed: Literal["fast", "standard", "slow"] = "standard"
+    tier: Literal["flagship", "standard", "budget"] = "standard"
+
+
+class PluginTTSResponse(BaseModel):
+    """Response for TTS plugin models."""
+    source: Literal["sdk", "fallback"]
+    providers: dict[str, list[PluginTTSModel]]
+
+
+class ModelsResponse(BaseModel):
+    """Generic response for STT/TTS/Realtime models."""
+    source: Literal["sdk", "fallback"]
+    inference: list[str]
+    plugins: dict[str, list[str]]
 
 
 class LLMMetricsSchema(BaseModel):
@@ -285,18 +437,6 @@ class LLMMetricsSchema(BaseModel):
             "tokens_per_second": "float - Token generation rate",
         }
     )
-    example_usage: str = Field(
-        default="""
-from livekit.agents.metrics import LLMMetrics
-
-def on_metrics(metrics: LLMMetrics):
-    print(f"Tokens: {metrics.total_tokens}")
-    print(f"TTFT: {metrics.ttft:.3f}s")
-    print(f"Speed: {metrics.tokens_per_second:.1f} tok/s")
-
-session.llm.on("metrics_collected", on_metrics)
-"""
-    )
 
 
 class CostEstimate(BaseModel):
@@ -314,25 +454,23 @@ class CostEstimate(BaseModel):
 class ModelTypeCapabilities(BaseModel):
     """Capabilities for a model type."""
     description: str
-    input: list[str] = Field(description="Supported input types")
-    output: list[str] = Field(description="Supported output types")
-    features: list[str] = Field(description="Available features")
-    optional_input: list[str] | None = Field(
-        default=None, description="Optional input types (model-dependent)"
-    )
+    input: list[str]
+    output: list[str]
+    features: list[str]
+    optional_input: list[str] | None = None
 
 
 class VisionCapableModels(BaseModel):
     """Models that support vision/image input."""
     description: str = "LLM models that can process images and video frames"
-    models: dict[str, list[str]] = Field(description="Vision-capable models by provider")
+    models: dict[str, list[str]]
     usage_notes: str
 
 
 class VideoInputModels(BaseModel):
     """Models that support live video input."""
     description: str = "Realtime models with native video stream support"
-    models: dict[str, list[str]] = Field(description="Video-capable models by provider")
+    models: dict[str, list[str]]
     usage_notes: str
 
 
@@ -357,160 +495,279 @@ def _get_capabilities() -> CapabilitiesResponse:
             description="Large Language Models for text generation and reasoning",
             input=["text", "images"],
             output=["text"],
-            features=[
-                "streaming",
-                "function_calling",
-                "vision",
-                "structured_output",
-                "context_caching",
-            ],
+            features=["streaming", "function_calling", "vision", "structured_output", "context_caching"],
             optional_input=["images (vision-capable models only)"],
         ),
         stt=ModelTypeCapabilities(
             description="Speech-to-Text models for transcription",
             input=["audio"],
             output=["text"],
-            features=[
-                "streaming",
-                "word_timestamps",
-                "language_detection",
-                "punctuation",
-                "speaker_diarization",
-            ],
+            features=["streaming", "word_timestamps", "language_detection", "punctuation", "speaker_diarization"],
         ),
         tts=ModelTypeCapabilities(
             description="Text-to-Speech models for voice synthesis",
             input=["text"],
             output=["audio"],
-            features=[
-                "streaming",
-                "multiple_voices",
-                "voice_cloning",
-                "ssml_support",
-                "emotion_control",
-            ],
+            features=["streaming", "multiple_voices", "voice_cloning", "ssml_support", "emotion_control"],
         ),
         realtime=ModelTypeCapabilities(
             description="Realtime multimodal models for bidirectional voice conversations",
             input=["audio", "text"],
             output=["audio", "text"],
-            features=[
-                "bidirectional_streaming",
-                "low_latency",
-                "turn_detection",
-                "interruption_handling",
-                "function_calling",
-            ],
+            features=["bidirectional_streaming", "low_latency", "turn_detection", "interruption_handling", "function_calling"],
             optional_input=["video (some models)"],
         ),
         vision=VisionCapableModels(
-            description="LLM models that can process images and video frames",
             models={
-                "openai": [
-                    "gpt-4o",
-                    "gpt-4o-mini",
-                    "gpt-4-turbo",
-                    "gpt-4-vision-preview",
-                ],
-                "anthropic": [
-                    "claude-3-5-sonnet-latest",
-                    "claude-3-5-sonnet-20241022",
-                    "claude-3-opus-latest",
-                    "claude-3-sonnet-20240229",
-                    "claude-3-haiku-20240307",
-                ],
-                "google": [
-                    "gemini-2.0-flash",
-                    "gemini-2.0-flash-lite",
-                    "gemini-1.5-pro",
-                    "gemini-1.5-flash",
-                ],
+                "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4.1", "gpt-4.1-mini", "gpt-5", "gpt-5-mini", "gpt-5.1", "gpt-5.2"],
+                "anthropic": ["claude-3-5-sonnet-latest", "claude-3-opus-latest", "claude-3-haiku-20240307"],
+                "google": ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-flash", "gemini-3-pro"],
             },
-            usage_notes=(
-                "Vision models can process static images added to chat context. "
-                "For video, sample frames at suitable intervals (e.g., on each user turn). "
-                "Use ImageContent to add images from URLs, base64, or video frames."
-            ),
+            usage_notes="Vision models can process static images added to chat context. Use ImageContent to add images.",
         ),
         video_input=VideoInputModels(
-            description="Realtime models with native video stream support",
             models={
-                "openai": [
-                    "gpt-4o-realtime-preview",
-                ],
-                "google": [
-                    "gemini-live-2.5-flash-native-audio",
-                    "gemini-2.0-flash-exp",
-                ],
+                "openai": ["gpt-4o-realtime-preview"],
+                "google": ["gemini-live-2.5-flash-native-audio", "gemini-2.0-flash-exp"],
             },
-            usage_notes=(
-                "These models can process continuous video streams natively. "
-                "Enable with video_input=True in RoomOptions. "
-                "The agent automatically receives frames from the user's camera or screen share. "
-                "Default: 1 FPS while speaking, 0.33 FPS otherwise."
-            ),
+            usage_notes="These models can process continuous video streams. Enable with video_input=True.",
         ),
     )
 
 
 # =============================================================================
-# Endpoints - Models by Type
+# Endpoints - LLM Models
 # =============================================================================
 
-@router.get("/llm", response_model=ModelsResponse)
-async def get_llm_models():
+@router.get("/llm", response_model=InferenceModelsResponse)
+async def get_llm_inference_models():
     """
-    Get all available LLM (Large Language Model) models.
+    Get all LiveKit Inference LLM models with full metadata and pricing.
     
-    Returns models from:
-    - **LiveKit Inference**: Hosted models (no API keys needed)
-    - **Plugins**: Direct provider integrations (requires your own API keys)
+    Returns models available via LiveKit Inference (hosted, no API keys needed).
+    Each model includes:
+    - **context_window**: Maximum context size in tokens
+    - **max_output**: Maximum output tokens
+    - **capabilities**: vision, function_calling, json_mode, streaming
+    - **speed**: fast, standard, slow
+    - **tier**: flagship, standard, budget
+    - **providers**: Available providers (azure, openai, google, baseten) with pricing
+    """
+    models_data = get_inference_llm_models()
     
+    models = []
+    for m in models_data:
+        providers = {}
+        for prov_name, prov_pricing in m.get("providers", {}).items():
+            providers[prov_name] = ProviderPricing(
+                input_per_1m=prov_pricing["input_per_1m"],
+                cached_per_1m=prov_pricing.get("cached_per_1m"),
+                output_per_1m=prov_pricing["output_per_1m"],
+            )
+        
+        models.append(InferenceModel(
+            model_id=m["model_id"],
+            display_name=m["display_name"],
+            provider=m["provider"],
+            context_window=m["context_window"],
+            max_output=m.get("max_output"),
+            capabilities=m.get("capabilities", []),
+            speed=m.get("speed", "standard"),
+            tier=m.get("tier", "standard"),
+            description=m.get("description"),
+            providers=providers,
+        ))
+    
+    return InferenceModelsResponse(
+        last_updated="2026-01-28",
+        models=models,
+    )
+
+
+@router.get("/llm/plugins", response_model=PluginModelsResponse)
+async def get_llm_plugin_models():
+    """
+    Get all LLM models available via LiveKit plugins.
+    
+    These require your own API keys for the respective providers.
     Providers include: OpenAI, Anthropic, Google, Groq, Mistral, and more.
     """
-    result = _get_llm_models()
-    return ModelsResponse(
-        source=result["source"],
-        inference=result["inference"],
-        plugins=result["plugins"],
+    plugins_raw = _get_llm_plugin_models()
+    
+    providers: dict[str, list[PluginModel]] = {}
+    for provider, model_ids in plugins_raw.items():
+        provider_models = []
+        for model_id in model_ids:
+            # Get metadata or generate default
+            metadata = get_model_metadata(model_id)
+            if not metadata:
+                metadata = get_default_metadata(model_id, provider)
+            
+            provider_models.append(PluginModel(
+                model_id=model_id,
+                display_name=metadata.display_name,
+                provider=provider,
+                context_window=metadata.context_window,
+                max_output=metadata.max_output,
+                capabilities=metadata.capabilities,
+                speed=metadata.speed,
+                tier=metadata.tier,
+            ))
+        providers[provider] = provider_models
+    
+    return PluginModelsResponse(
+        source="sdk",
+        providers=providers,
     )
 
 
-@router.get("/stt", response_model=ModelsResponse)
-async def get_stt_models():
+# =============================================================================
+# Endpoints - STT/TTS/Realtime Models
+# =============================================================================
+
+@router.get("/stt", response_model=InferenceSTTResponse)
+async def get_stt_inference_models():
     """
-    Get all available STT (Speech-to-Text) models.
+    Get all LiveKit Inference STT models with full metadata and pricing.
     
-    Returns models from:
-    - **LiveKit Inference**: Hosted models (no API keys needed)
-    - **Plugins**: Direct provider integrations (requires your own API keys)
+    Returns models available via LiveKit Inference (hosted, no API keys needed).
+    Each model includes:
+    - **languages**: Supported languages (en, multilingual)
+    - **features**: streaming, punctuation, word_timestamps, diarization, etc.
+    - **speed**: fast, standard, slow
+    - **tier**: flagship, standard, budget
+    - **pricing**: USD per minute (build/ship and scale tiers)
+    """
+    models_data = get_inference_stt_models()
     
-    Providers include: Deepgram, Google, Groq, ElevenLabs, Cartesia, and more.
+    models = []
+    for m in models_data:
+        pricing_data = m.get("pricing", {})
+        models.append(InferenceSTTModel(
+            model_id=m["model_id"],
+            display_name=m["display_name"],
+            provider=m["provider"],
+            languages=m.get("languages", []),
+            features=m.get("features", []),
+            speed=m.get("speed", "standard"),
+            tier=m.get("tier", "standard"),
+            description=m.get("description"),
+            pricing=STTPricing(
+                build_ship_per_min=pricing_data.get("build_ship_per_min", 0),
+                scale_per_min=pricing_data.get("scale_per_min", 0),
+            ),
+        ))
+    
+    return InferenceSTTResponse(
+        last_updated="2026-01-28",
+        models=models,
+    )
+
+
+@router.get("/stt/plugins", response_model=PluginSTTResponse)
+async def get_stt_plugin_models():
+    """
+    Get all STT models available via LiveKit plugins.
+    
+    These require your own API keys for the respective providers.
     """
     result = _get_stt_models()
-    return ModelsResponse(
+    
+    providers: dict[str, list[PluginSTTModel]] = {}
+    for provider, model_ids in result["plugins"].items():
+        provider_models = []
+        for model_id in model_ids:
+            # Generate display name from model_id
+            display_name = model_id.replace("-", " ").replace("_", " ").title()
+            
+            provider_models.append(PluginSTTModel(
+                model_id=model_id,
+                display_name=display_name,
+                provider=provider,
+                languages=["multilingual"] if "multilingual" in model_id.lower() else ["en"],
+                features=["streaming"],
+                speed="fast",
+                tier="standard",
+            ))
+        if provider_models:
+            providers[provider] = provider_models
+    
+    return PluginSTTResponse(
         source=result["source"],
-        inference=result["inference"],
-        plugins=result["plugins"],
+        providers=providers,
     )
 
 
-@router.get("/tts", response_model=ModelsResponse)
-async def get_tts_models():
+@router.get("/tts", response_model=InferenceTTSResponse)
+async def get_tts_inference_models():
     """
-    Get all available TTS (Text-to-Speech) models.
+    Get all LiveKit Inference TTS models with full metadata and pricing.
     
-    Returns models from:
-    - **LiveKit Inference**: Hosted models (no API keys needed)
-    - **Plugins**: Direct provider integrations (requires your own API keys)
+    Returns models available via LiveKit Inference (hosted, no API keys needed).
+    Each model includes:
+    - **languages**: Supported languages (en, multilingual)
+    - **features**: streaming, low_latency, voice_cloning, emotion_control, etc.
+    - **speed**: fast, standard, slow
+    - **tier**: flagship, standard, budget
+    - **pricing**: USD per million characters (build/ship and scale tiers)
+    """
+    models_data = get_inference_tts_models()
     
-    Providers include: OpenAI, ElevenLabs, Cartesia, Deepgram, Rime, and more.
+    models = []
+    for m in models_data:
+        pricing_data = m.get("pricing", {})
+        models.append(InferenceTTSModel(
+            model_id=m["model_id"],
+            display_name=m["display_name"],
+            provider=m["provider"],
+            languages=m.get("languages", []),
+            features=m.get("features", []),
+            speed=m.get("speed", "standard"),
+            tier=m.get("tier", "standard"),
+            description=m.get("description"),
+            pricing=TTSPricing(
+                build_ship_per_1m_chars=pricing_data.get("build_ship_per_1m_chars", 0),
+                scale_per_1m_chars=pricing_data.get("scale_per_1m_chars", 0),
+            ),
+        ))
+    
+    return InferenceTTSResponse(
+        last_updated="2026-01-28",
+        models=models,
+    )
+
+
+@router.get("/tts/plugins", response_model=PluginTTSResponse)
+async def get_tts_plugin_models():
+    """
+    Get all TTS models available via LiveKit plugins.
+    
+    These require your own API keys for the respective providers.
     """
     result = _get_tts_models()
-    return ModelsResponse(
+    
+    providers: dict[str, list[PluginTTSModel]] = {}
+    for provider, model_ids in result["plugins"].items():
+        provider_models = []
+        for model_id in model_ids:
+            # Generate display name from model_id
+            display_name = model_id.replace("-", " ").replace("_", " ").title()
+            
+            provider_models.append(PluginTTSModel(
+                model_id=model_id,
+                display_name=display_name,
+                provider=provider,
+                languages=["en"],
+                features=["streaming"],
+                speed="fast",
+                tier="standard",
+            ))
+        if provider_models:
+            providers[provider] = provider_models
+    
+    return PluginTTSResponse(
         source=result["source"],
-        inference=result["inference"],
-        plugins=result["plugins"],
+        providers=providers,
     )
 
 
@@ -520,9 +777,6 @@ async def get_realtime_models():
     Get all available Realtime (multimodal voice) models.
     
     Realtime models support bidirectional audio streaming with optional video.
-    These models handle STT, LLM, and TTS in a single integrated pipeline.
-    
-    Providers include: OpenAI (GPT-4o Realtime), Google (Gemini Live), AWS (Nova Sonic).
     """
     result = _get_realtime_models()
     return ModelsResponse(
@@ -541,94 +795,20 @@ async def get_model_capabilities():
     """
     Get capabilities overview for all model types.
     
-    Returns detailed information about:
-    - **Input/Output types**: What each model type accepts and produces
-    - **Features**: Available capabilities (streaming, function calling, etc.)
-    - **Vision models**: LLMs that can process images and video frames
-    - **Video input models**: Realtime models with native video stream support
-    
-    Use this endpoint to understand what's possible with each model type
-    and which specific models support advanced features like vision.
+    Returns detailed information about input/output types, features,
+    vision-capable models, and video input models.
     """
     return _get_capabilities()
 
 
 # =============================================================================
-# Endpoints - Pricing
-# =============================================================================
-
-@router.get("/pricing", response_model=PricingResponse)
-async def get_all_pricing(
-    model_type: ModelTypeEnum | None = Query(
-        None,
-        description="Filter by model type (llm, stt, tts, realtime)"
-    ),
-):
-    """
-    Get pricing information for all models.
-    
-    Optionally filter by model type. Prices are in USD.
-    - LLM: per 1M tokens
-    - STT: per minute of audio
-    - TTS: per 1M characters
-    - Realtime: per minute of audio I/O
-    """
-    if model_type:
-        match model_type:
-            case ModelTypeEnum.llm:
-                models = LLM_PRICING
-            case ModelTypeEnum.stt:
-                models = STT_PRICING
-            case ModelTypeEnum.tts:
-                models = TTS_PRICING
-            case ModelTypeEnum.realtime:
-                models = REALTIME_PRICING
-    else:
-        models = ALL_PRICING
-    
-    return PricingResponse(
-        last_updated="2026-01-28",
-        models=models,
-    )
-
-
-@router.get("/pricing/{model_id:path}", response_model=SingleModelPricingResponse)
-async def get_model_pricing_endpoint(model_id: str):
-    """
-    Get pricing for a specific model.
-    
-    Model ID should be in format 'provider/model-name', e.g. 'openai/gpt-4o-mini'.
-    """
-    pricing = get_model_pricing(model_id)
-    if not pricing:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Pricing not found for model: {model_id}. "
-            "Check /models/llm, /models/stt, /models/tts, or /models/realtime for valid model IDs."
-        )
-    
-    return SingleModelPricingResponse(
-        model_id=pricing.model_id,
-        provider=pricing.provider,
-        model_type=pricing.model_type,
-        display_name=pricing.display_name,
-        pricing=pricing.pricing,
-        notes=pricing.notes,
-    )
-
-
-# =============================================================================
-# Endpoints - Metrics & Cost Estimation
+# Endpoints - Metrics
 # =============================================================================
 
 @router.get("/metrics/llm", response_model=LLMMetricsSchema)
 async def get_llm_metrics_schema():
     """
     Get the schema and usage information for LLMMetrics.
-    
-    LLMMetrics are emitted by the LLM after each generation and contain
-    token counts, latency information, and other useful metrics for
-    monitoring and cost estimation.
     """
     return LLMMetricsSchema()
 
@@ -639,42 +819,42 @@ async def estimate_cost(
     prompt_tokens: int = Query(..., ge=0, description="Number of prompt tokens"),
     completion_tokens: int = Query(..., ge=0, description="Number of completion tokens"),
     cached_tokens: int = Query(0, ge=0, description="Number of cached prompt tokens"),
+    provider: str = Query("openai", description="Provider to use for pricing (azure, openai, google, baseten)"),
 ):
     """
     Estimate the cost for a given token usage.
     
-    Useful for calculating costs based on LLMMetrics data.
-    Only works for LLM models with token-based pricing.
+    Specify the provider to get accurate pricing (azure vs openai may differ slightly).
     """
-    pricing = get_model_pricing(model_id)
-    if not pricing:
+    models = get_inference_llm_models()
+    model_data = next((m for m in models if m["model_id"] == model_id), None)
+    
+    if not model_data:
         raise HTTPException(
             status_code=404,
-            detail=f"Pricing not found for model: {model_id}"
+            detail=f"Model not found: {model_id}. Check /models/llm for valid model IDs."
         )
     
-    if pricing.model_type != "llm":
+    providers = model_data.get("providers", {})
+    if provider not in providers:
+        available = list(providers.keys())
         raise HTTPException(
             status_code=400,
-            detail=f"Cost estimation only available for LLM models. "
-            f"Model {model_id} is type '{pricing.model_type}'."
+            detail=f"Provider '{provider}' not available for {model_id}. Available: {available}"
         )
     
-    token_pricing = pricing.pricing
-    if not isinstance(token_pricing, TokenPricing):
-        raise HTTPException(
-            status_code=500,
-            detail="Invalid pricing configuration for model"
-        )
+    pricing = providers[provider]
+    input_per_1m = pricing["input_per_1m"]
+    output_per_1m = pricing["output_per_1m"]
+    cached_per_1m = pricing.get("cached_per_1m")
     
-    # Calculate costs (prices are per 1M tokens)
     non_cached_prompt = prompt_tokens - cached_tokens
-    prompt_cost = (non_cached_prompt / 1_000_000) * token_pricing.input_per_1m
-    completion_cost = (completion_tokens / 1_000_000) * token_pricing.output_per_1m
+    prompt_cost = (non_cached_prompt / 1_000_000) * input_per_1m
+    completion_cost = (completion_tokens / 1_000_000) * output_per_1m
     
     cached_cost = None
-    if cached_tokens > 0 and token_pricing.cached_input_per_1m:
-        cached_cost = (cached_tokens / 1_000_000) * token_pricing.cached_input_per_1m
+    if cached_tokens > 0 and cached_per_1m:
+        cached_cost = (cached_tokens / 1_000_000) * cached_per_1m
         prompt_cost += cached_cost
     
     return CostEstimate(

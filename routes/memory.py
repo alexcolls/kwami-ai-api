@@ -316,6 +316,58 @@ async def get_user_messages(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/{user_id}/edge/{edge_uuid}")
+async def delete_edge(
+    user_id: str,
+    edge_uuid: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
+    """Delete a specific edge (fact) from the user's knowledge graph.
+    
+    This permanently removes the fact/relationship from memory.
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"🗑️ Deleting edge {edge_uuid} for user: {user_id}")
+    
+    try:
+        await client.graph.edge.delete(uuid_=edge_uuid)
+        logger.info(f"🗑️ Successfully deleted edge: {edge_uuid}")
+        return {"success": True, "deleted_edge": edge_uuid}
+    except Exception as e:
+        error_msg = str(e)
+        if "404" in error_msg:
+            raise HTTPException(status_code=404, detail=f"Edge {edge_uuid} not found")
+        logger.error(f"Failed to delete edge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{user_id}/node/{node_uuid}")
+async def delete_node(
+    user_id: str,
+    node_uuid: str,
+    user: Annotated[AuthUser, Depends(require_auth)],
+    client: AsyncZep = Depends(get_zep_client),
+):
+    """Delete a specific node (entity) from the user's knowledge graph.
+    
+    Note: This will also delete all edges connected to this node.
+    """
+    verify_user_access(user, user_id)
+    logger.info(f"🗑️ Deleting node {node_uuid} for user: {user_id}")
+    
+    try:
+        await client.graph.node.delete(uuid_=node_uuid)
+        logger.info(f"🗑️ Successfully deleted node: {node_uuid}")
+        return {"success": True, "deleted_node": node_uuid}
+    except Exception as e:
+        error_msg = str(e)
+        if "404" in error_msg:
+            raise HTTPException(status_code=404, detail=f"Node {node_uuid} not found")
+        logger.error(f"Failed to delete node: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{user_id}/edges")
 async def get_user_edges(
     user_id: str,

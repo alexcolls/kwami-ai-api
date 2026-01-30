@@ -12,6 +12,7 @@ dependencies = [
     "livekit-agents>=1.0.0",
     "python-dotenv>=1.0.0",
     "zep-cloud>=3.0.0",
+    "pyyaml>=6.0.0",
     "PyJWT>=2.8.0",
     "cryptography>=42.0.0",
     # LiveKit plugins for model definitions extraction

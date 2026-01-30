@@ -1,0 +1,158 @@
+# LiveKit Inference STT Models - Pricing & Metadata
+# Last updated: 2026-01-28
+# Prices are in USD per minute of audio
+# Source: https://livekit.io/pricing/inference
+
+models:
+  # =============================================================================
+  # AssemblyAI Models
+  # =============================================================================
+
+  - model_id: "assemblyai/universal-streaming"
+    display_name: "Universal Streaming"
+    provider: "assemblyai"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_min: 0.0025
+      scale_per_min: 0.0025
+
+  - model_id: "assemblyai/universal-streaming-multilingual"
+    display_name: "Universal Streaming Multilingual"
+    provider: "assemblyai"
+    languages: ["multilingual"]
+    features: ["streaming", "punctuation", "word_timestamps", "language_detection"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_min: 0.0025
+      scale_per_min: 0.0025
+
+  # =============================================================================
+  # Cartesia Models
+  # =============================================================================
+
+  - model_id: "cartesia/ink-whisper"
+    display_name: "Ink Whisper"
+    provider: "cartesia"
+    languages: ["en", "multilingual"]
+    features: ["streaming", "punctuation", "word_timestamps"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_min: 0.0030
+      scale_per_min: 0.0023
+
+  # =============================================================================
+  # Deepgram Models
+  # =============================================================================
+
+  - model_id: "deepgram/flux"
+    display_name: "Flux"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "smart_formatting"]
+    speed: "fast"
+    tier: "flagship"
+    description: "Latest Deepgram model with improved accuracy"
+    pricing:
+      build_ship_per_min: 0.0077
+      scale_per_min: 0.0065
+
+  - model_id: "deepgram/nova-3"
+    display_name: "Nova-3 (Monolingual)"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "smart_formatting", "diarization"]
+    speed: "fast"
+    tier: "flagship"
+    pricing:
+      build_ship_per_min: 0.0077
+      scale_per_min: 0.0065
+
+  - model_id: "deepgram/nova-3-multilingual"
+    display_name: "Nova-3 (Multilingual)"
+    provider: "deepgram"
+    languages: ["multilingual"]
+    features: ["streaming", "punctuation", "word_timestamps", "smart_formatting", "diarization", "language_detection"]
+    speed: "fast"
+    tier: "flagship"
+    pricing:
+      build_ship_per_min: 0.0092
+      scale_per_min: 0.0078
+
+  - model_id: "deepgram/nova-3-medical"
+    display_name: "Nova-3 Medical"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "medical_vocabulary"]
+    speed: "fast"
+    tier: "flagship"
+    description: "Optimized for medical terminology"
+    pricing:
+      build_ship_per_min: 0.0077
+      scale_per_min: 0.0065
+
+  - model_id: "deepgram/nova-2"
+    display_name: "Nova-2"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "smart_formatting"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_min: 0.0058
+      scale_per_min: 0.0047
+
+  - model_id: "deepgram/nova-2-medical"
+    display_name: "Nova-2 Medical"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "medical_vocabulary"]
+    speed: "fast"
+    tier: "standard"
+    description: "Optimized for medical terminology"
+    pricing:
+      build_ship_per_min: 0.0058
+      scale_per_min: 0.0047
+
+  - model_id: "deepgram/nova-2-conversationalai"
+    display_name: "Nova-2 Conversational AI"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "conversational"]
+    speed: "fast"
+    tier: "standard"
+    description: "Optimized for conversational AI applications"
+    pricing:
+      build_ship_per_min: 0.0058
+      scale_per_min: 0.0047
+
+  - model_id: "deepgram/nova-2-phonecall"
+    display_name: "Nova-2 Phonecall"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "punctuation", "word_timestamps", "telephony"]
+    speed: "fast"
+    tier: "standard"
+    description: "Optimized for phone call audio quality"
+    pricing:
+      build_ship_per_min: 0.0058
+      scale_per_min: 0.0047
+
+  # =============================================================================
+  # ElevenLabs Models
+  # =============================================================================
+
+  - model_id: "elevenlabs/scribe-v2-realtime"
+    display_name: "Scribe V2 Realtime"
+    provider: "elevenlabs"
+    languages: ["multilingual"]
+    features: ["streaming", "punctuation", "word_timestamps", "language_detection"]
+    speed: "fast"
+    tier: "flagship"
+    pricing:
+      build_ship_per_min: 0.0105
+      scale_per_min: 0.0105

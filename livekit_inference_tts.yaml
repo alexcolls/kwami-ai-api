@@ -1,0 +1,223 @@
+# LiveKit Inference TTS Models - Pricing & Metadata
+# Last updated: 2026-01-28
+# Prices are in USD per million characters
+# Source: https://livekit.io/pricing/inference
+
+models:
+  # =============================================================================
+  # Cartesia Models
+  # =============================================================================
+
+  - model_id: "cartesia/sonic-3"
+    display_name: "Sonic 3"
+    provider: "cartesia"
+    languages: ["en", "multilingual"]
+    features: ["streaming", "low_latency", "voice_cloning", "emotion_control"]
+    speed: "fast"
+    tier: "flagship"
+    description: "Latest generation with improved quality and speed"
+    pricing:
+      build_ship_per_1m_chars: 50.00
+      scale_per_1m_chars: 37.50
+
+  - model_id: "cartesia/sonic-2"
+    display_name: "Sonic 2"
+    provider: "cartesia"
+    languages: ["en", "multilingual"]
+    features: ["streaming", "low_latency", "voice_cloning"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_1m_chars: 50.00
+      scale_per_1m_chars: 37.50
+
+  - model_id: "cartesia/sonic-turbo"
+    display_name: "Sonic Turbo"
+    provider: "cartesia"
+    languages: ["en", "multilingual"]
+    features: ["streaming", "ultra_low_latency"]
+    speed: "fast"
+    tier: "standard"
+    description: "Optimized for lowest latency"
+    pricing:
+      build_ship_per_1m_chars: 50.00
+      scale_per_1m_chars: 37.50
+
+  - model_id: "cartesia/sonic"
+    display_name: "Sonic"
+    provider: "cartesia"
+    languages: ["en", "multilingual"]
+    features: ["streaming", "low_latency"]
+    speed: "fast"
+    tier: "budget"
+    pricing:
+      build_ship_per_1m_chars: 50.00
+      scale_per_1m_chars: 37.50
+
+  # =============================================================================
+  # Deepgram Models
+  # =============================================================================
+
+  - model_id: "deepgram/aura-1"
+    display_name: "Aura-1"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "low_latency"]
+    speed: "fast"
+    tier: "budget"
+    pricing:
+      build_ship_per_1m_chars: 15.00
+      scale_per_1m_chars: 15.00
+
+  - model_id: "deepgram/aura-2"
+    display_name: "Aura-2"
+    provider: "deepgram"
+    languages: ["en"]
+    features: ["streaming", "low_latency", "improved_quality"]
+    speed: "fast"
+    tier: "standard"
+    description: "Improved voice quality over Aura-1"
+    pricing:
+      build_ship_per_1m_chars: 30.00
+      scale_per_1m_chars: 27.00
+
+  # =============================================================================
+  # ElevenLabs Models
+  # =============================================================================
+
+  - model_id: "elevenlabs/eleven-flash-v2"
+    display_name: "Eleven Flash v2"
+    provider: "elevenlabs"
+    languages: ["en"]
+    features: ["streaming", "low_latency", "voice_cloning"]
+    speed: "fast"
+    tier: "standard"
+    pricing:
+      build_ship_per_1m_chars: 150.00
+      scale_per_1m_chars: 60.00
+
+  - model_id: "elevenlabs/eleven-flash-v2.5"
+    display_name: "Eleven Flash v2.5"
+    provider: "elevenlabs"
+    languages: ["en"]
+    features: ["streaming", "low_latency", "voice_cloning", "improved_quality"]
+    speed: "fast"
+    tier: "flagship"
+    description: "Latest Flash model with improved quality"
+    pricing:
+      build_ship_per_1m_chars: 150.00
+      scale_per_1m_chars: 60.00
+
+  - model_id: "elevenlabs/eleven-turbo-v2"
+    display_name: "Eleven Turbo v2"
+    provider: "elevenlabs"
+    languages: ["en"]
+    features: ["streaming", "ultra_low_latency", "voice_cloning"]
+    speed: "fast"
+    tier: "standard"
+    description: "Optimized for lowest latency"
+    pricing:
+      build_ship_per_1m_chars: 150.00
+      scale_per_1m_chars: 60.00
+
+  - model_id: "elevenlabs/eleven-turbo-v2.5"
+    display_name: "Eleven Turbo v2.5"
+    provider: "elevenlabs"
+    languages: ["en"]
+    features: ["streaming", "ultra_low_latency", "voice_cloning", "improved_quality"]
+    speed: "fast"
+    tier: "flagship"
+    description: "Latest Turbo model with improved quality"
+    pricing:
+      build_ship_per_1m_chars: 150.00
+      scale_per_1m_chars: 60.00
+
+  - model_id: "elevenlabs/eleven-multilingual-v2"
+    display_name: "Eleven Multilingual v2"
+    provider: "elevenlabs"
+    languages: ["multilingual"]
+    features: ["streaming", "low_latency", "voice_cloning", "29_languages"]
+    speed: "standard"
+    tier: "flagship"
+    description: "Supports 29 languages with natural voice cloning"
+    pricing:
+      build_ship_per_1m_chars: 300.00
+      scale_per_1m_chars: 120.00
+
+  # =============================================================================
+  # Inworld Models
+  # =============================================================================
+
+  - model_id: "inworld/tts-1.5-max"
+    display_name: "Inworld TTS 1.5 Max"
+    provider: "inworld"
+    languages: ["en"]
+    features: ["streaming", "low_latency", "emotion_control"]
+    speed: "standard"
+    tier: "flagship"
+    description: "Highest quality Inworld voice"
+    pricing:
+      build_ship_per_1m_chars: 10.00
+      scale_per_1m_chars: 10.00
+
+  - model_id: "inworld/tts-1.5-mini"
+    display_name: "Inworld TTS 1.5 Mini"
+    provider: "inworld"
+    languages: ["en"]
+    features: ["streaming", "low_latency"]
+    speed: "fast"
+    tier: "budget"
+    description: "Fast and affordable"
+    pricing:
+      build_ship_per_1m_chars: 5.00
+      scale_per_1m_chars: 5.00
+
+  - model_id: "inworld/tts-1-max"
+    display_name: "Inworld TTS 1 Max"
+    provider: "inworld"
+    languages: ["en"]
+    features: ["streaming", "low_latency"]
+    speed: "standard"
+    tier: "standard"
+    pricing:
+      build_ship_per_1m_chars: 10.00
+      scale_per_1m_chars: 10.00
+
+  - model_id: "inworld/tts-1"
+    display_name: "Inworld TTS 1"
+    provider: "inworld"
+    languages: ["en"]
+    features: ["streaming", "low_latency"]
+    speed: "fast"
+    tier: "budget"
+    pricing:
+      build_ship_per_1m_chars: 5.00
+      scale_per_1m_chars: 5.00
+
+  # =============================================================================
+  # Rime Models
+  # =============================================================================
+
+  - model_id: "rime/arcana-v2"
+    display_name: "Arcana V2"
+    provider: "rime"
+    languages: ["en"]
+    features: ["streaming", "low_latency", "expressive"]
+    speed: "standard"
+    tier: "flagship"
+    description: "High-quality expressive voices"
+    pricing:
+      build_ship_per_1m_chars: 40.00
+      scale_per_1m_chars: 30.00
+
+  - model_id: "rime/mist-v2"
+    display_name: "Mist V2"
+    provider: "rime"
+    languages: ["en"]
+    features: ["streaming", "low_latency"]
+    speed: "fast"
+    tier: "standard"
+    description: "Balanced quality and speed"
+    pricing:
+      build_ship_per_1m_chars: 30.00
+      scale_per_1m_chars: 20.00
