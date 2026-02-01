@@ -101,9 +101,9 @@ async def generate_token(
 @router.get("", response_model=TokenResponse)
 async def generate_token_get(
     user: Annotated[AuthUser, Depends(require_auth)],
-    room_name: Annotated[str, Query(min_length=1, max_length=128, description="Room name")],
-    participant_name: Annotated[str, Query(min_length=1, max_length=128, description="Participant name")],
-    participant_identity: Annotated[Optional[str], Query(max_length=128)] = None,
+    room_name: Annotated[str, Query(alias="roomName", min_length=1, max_length=128, description="Room name")],
+    participant_name: Annotated[str, Query(alias="participantName", min_length=1, max_length=128, description="Participant name")],
+    participant_identity: Annotated[Optional[str], Query(alias="participantIdentity", max_length=128)] = None,
 ):
     """
     Generate a LiveKit access token (GET method for simple integrations).

@@ -28,7 +28,7 @@ dev:
 	uv run python -m src.main
 
 test:
-	uv run pytest tests/ -v
+	uv run python -m pytest tests/ -v
 
 # =============================================================================
 # Code Quality

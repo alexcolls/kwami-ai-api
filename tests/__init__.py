@@ -1,1 +1,1 @@
-"""Tests for kwami-ai-lk."""
+"""Tests for kwami-ai-api."""
