@@ -8,8 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from routes import health, token, memory, models
-from config import settings
+from src.api.routes import health, token, memory, models
+from src.core.config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -73,7 +73,7 @@ app.include_router(models.router, prefix="/models", tags=["Models"])
 def run():
     """Run the API server."""
     uvicorn.run(
-        "main:app",
+        "src.main:app",
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.debug,

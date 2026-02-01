@@ -5,14 +5,15 @@ Do NOT manually dispatch agents here to avoid duplicate agents in rooms.
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from token_utils import create_token
-from config import settings
-from auth import require_auth, AuthUser
+from src.services.livekit import create_token
+from src.core.config import settings
+from src.api.deps import require_auth
+from src.core.security import AuthUser
 
 logger = logging.getLogger("kwami-api.token")
 router = APIRouter()
@@ -26,10 +27,10 @@ class TokenRequest(BaseModel):
     room_name: str = Field(
         ..., min_length=1, max_length=128, alias="roomName", description="Room name to join"
     )
-    participant_name: str | None = Field(
+    participant_name: Optional[str] = Field(
         None, min_length=1, max_length=128, alias="participantName", description="Display name for participant"
     )
-    participant_identity: str | None = Field(
+    participant_identity: Optional[str] = Field(
         None, max_length=128, alias="participantIdentity", description="Unique identity (defaults to participant_name)"
     )
 
@@ -39,7 +40,7 @@ class TokenRequest(BaseModel):
     can_publish_data: bool = Field(True, alias="canPublishData", description="Allow publishing data messages")
 
     # Kwami-specific metadata
-    kwami_id: str | None = Field(None, alias="kwamiId", description="Kwami instance ID for agent matching")
+    kwami_id: Optional[str] = Field(None, alias="kwamiId", description="Kwami instance ID for agent matching")
 
 
 class TokenResponse(BaseModel):
@@ -102,7 +103,7 @@ async def generate_token_get(
     user: Annotated[AuthUser, Depends(require_auth)],
     room_name: Annotated[str, Query(min_length=1, max_length=128, description="Room name")],
     participant_name: Annotated[str, Query(min_length=1, max_length=128, description="Participant name")],
-    participant_identity: Annotated[str | None, Query(max_length=128)] = None,
+    participant_identity: Annotated[Optional[str], Query(max_length=128)] = None,
 ):
     """
     Generate a LiveKit access token (GET method for simple integrations).

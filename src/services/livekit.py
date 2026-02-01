@@ -6,7 +6,7 @@ from livekit import api
 from livekit.protocol.room import RoomConfiguration
 from livekit.protocol.agent_dispatch import RoomAgentDispatch
 
-from config import settings
+from src.core.config import settings
 
 # Default agent name deployed to LiveKit Cloud
 DEFAULT_AGENT_NAME = "kwami-agent"

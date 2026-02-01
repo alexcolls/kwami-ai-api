@@ -25,7 +25,7 @@ install:
 	uv sync
 
 dev:
-	uv run python main.py
+	uv run python -m src.main
 
 test:
 	uv run pytest tests/ -v

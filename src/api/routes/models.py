@@ -16,7 +16,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from pricing import (
+from src.services.pricing import (
     ALL_PRICING,
     STT_PRICING,
     TTS_PRICING,
@@ -27,7 +27,7 @@ from pricing import (
     RealtimePricing,
     get_model_pricing,
 )
-from model_metadata import (
+from src.services.models import (
     get_model_metadata,
     get_default_metadata,
 )
@@ -42,13 +42,16 @@ router = APIRouter()
 
 def _load_inference_llm_models() -> list[dict]:
     """Load LLM models from YAML configuration."""
-    yaml_path = Path(__file__).parent.parent / "livekit_inference_llm.yaml"
+    # Assuming running from root, or use relative path from this file
+    # This file is in src/api/routes/models.py
+    # Root is ../../../ (3 levels up)
+    yaml_path = Path(__file__).parents[3] / "livekit_inference_llm.yaml"
     try:
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f)
             return data.get("models", [])
     except Exception as e:
-        logger.error(f"Failed to load inference LLM config: {e}")
+        logger.error(f"Failed to load inference LLM config from {yaml_path}: {e}")
         return []
 
 
@@ -66,13 +69,13 @@ def get_inference_llm_models() -> list[dict]:
 
 def _load_inference_stt_models() -> list[dict]:
     """Load STT models from YAML configuration."""
-    yaml_path = Path(__file__).parent.parent / "livekit_inference_stt.yaml"
+    yaml_path = Path(__file__).parents[3] / "livekit_inference_stt.yaml"
     try:
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f)
             return data.get("models", [])
     except Exception as e:
-        logger.error(f"Failed to load inference STT config: {e}")
+        logger.error(f"Failed to load inference STT config from {yaml_path}: {e}")
         return []
 
 
@@ -90,13 +93,13 @@ def get_inference_stt_models() -> list[dict]:
 
 def _load_inference_tts_models() -> list[dict]:
     """Load TTS models from YAML configuration."""
-    yaml_path = Path(__file__).parent.parent / "livekit_inference_tts.yaml"
+    yaml_path = Path(__file__).parents[3] / "livekit_inference_tts.yaml"
     try:
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f)
             return data.get("models", [])
     except Exception as e:
-        logger.error(f"Failed to load inference TTS config: {e}")
+        logger.error(f"Failed to load inference TTS config from {yaml_path}: {e}")
         return []
 
 

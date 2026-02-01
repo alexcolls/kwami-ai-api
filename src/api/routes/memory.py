@@ -5,8 +5,9 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from zep_cloud.client import AsyncZep
 
-from config import settings
-from auth import require_auth, check_user_access, AuthUser
+from src.core.config import settings
+from src.api.deps import require_auth
+from src.core.security import check_user_access, AuthUser
 
 router = APIRouter()
 logger = logging.getLogger("kwami-api.memory")
@@ -740,7 +741,7 @@ async def get_entities_by_type(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _infer_node_type(name: str, summary: str | None, labels: list[str]) -> str:
+def _infer_node_type(name: str, summary: Optional[str], labels: list[str]) -> str:
     """Infer node type from Zep labels or fall back to keyword-based inference.
     
     Zep's free tier often returns generic labels, so we use smart inference.
@@ -998,5 +999,3 @@ async def get_memory_graph(
     except Exception as e:
         logger.error(f"Failed to fetch memory graph: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-

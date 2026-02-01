@@ -38,6 +38,9 @@ dev = [
     "ruff>=0.8.0",
 ]
 
+[project.scripts]
+kwami-api = "src.main:run"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

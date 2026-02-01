@@ -18,7 +18,7 @@ async def client():
     os.environ.setdefault("LIVEKIT_API_KEY", "test-api-key")
     os.environ.setdefault("LIVEKIT_API_SECRET", "test-api-secret-that-is-long-enough")
     
-    from main import app
+    from src.main import app
     
     async with AsyncClient(
         transport=ASGITransport(app=app),
