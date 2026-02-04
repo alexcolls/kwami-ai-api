@@ -1,0 +1,245 @@
+# LiveKit STT, TTS & Realtime Languages Configuration
+# Last updated: 2026-02-04
+#
+# This file contains language definitions for providers that don't expose
+# language types in the LiveKit SDK.
+#
+# SDK-extracted languages (defined in src/services/languages.py):
+# - Deepgram STT: 35 languages
+# - Cartesia STT: 43 languages
+# - Cartesia TTS: 7 languages
+# - Google STT: 168 languages
+
+# =============================================================================
+# STT Languages by Provider
+# =============================================================================
+stt:
+  # OpenAI Whisper - supports 100+ languages
+  openai:
+    - "en"
+    - "en-US"
+    - "en-GB"
+    - "es"
+    - "es-419"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "pt-BR"
+    - "zh"
+    - "zh-CN"
+    - "zh-TW"
+    - "ja"
+    - "ko"
+    - "ru"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "pl"
+    - "tr"
+    - "vi"
+    - "th"
+    - "id"
+    - "sv"
+    - "da"
+    - "no"
+    - "fi"
+    - "cs"
+    - "el"
+    - "he"
+    - "hu"
+    - "ro"
+    - "uk"
+    - "multi"
+
+  # AssemblyAI
+  assemblyai:
+    - "en"
+    - "en-US"
+    - "en-GB"
+    - "en-AU"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "nl"
+    - "hi"
+    - "ja"
+    - "zh"
+    - "fi"
+    - "ko"
+    - "pl"
+    - "ru"
+    - "tr"
+    - "uk"
+    - "vi"
+    - "multi"
+
+  # ElevenLabs Scribe
+  elevenlabs:
+    - "en"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "pl"
+    - "hi"
+    - "multi"
+
+  # Groq Whisper
+  groq:
+    - "en"
+    - "en-US"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "ja"
+    - "ko"
+    - "zh"
+    - "ru"
+    - "ar"
+    - "hi"
+    - "multi"
+
+# =============================================================================
+# TTS Languages by Provider
+# =============================================================================
+tts:
+  # OpenAI TTS - voices are primarily English but support multiple languages
+  openai:
+    - "en"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "pl"
+    - "ru"
+    - "zh"
+    - "ja"
+    - "ko"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "tr"
+
+  # ElevenLabs - multilingual models support 29 languages
+  elevenlabs:
+    - "en"
+    - "en-US"
+    - "en-GB"
+    - "en-AU"
+    - "es"
+    - "es-419"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "pt-BR"
+    - "pl"
+    - "ru"
+    - "zh"
+    - "ja"
+    - "ko"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "tr"
+    - "vi"
+    - "sv"
+    - "da"
+    - "no"
+    - "fi"
+    - "cs"
+    - "el"
+    - "hu"
+    - "id"
+    - "multi"
+
+  # Deepgram Aura - English only
+  deepgram:
+    - "en"
+
+  # Google Cloud TTS
+  google:
+    - "en"
+    - "en-US"
+    - "en-GB"
+    - "en-AU"
+    - "es"
+    - "es-419"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "pt-BR"
+    - "ja"
+    - "ko"
+    - "zh"
+    - "zh-TW"
+    - "ru"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "pl"
+    - "tr"
+    - "vi"
+    - "th"
+    - "id"
+    - "sv"
+    - "da"
+    - "no"
+    - "fi"
+
+  # Rime - English only
+  rime:
+    - "en"
+
+# =============================================================================
+# Realtime Languages by Provider
+# =============================================================================
+realtime:
+  # OpenAI Realtime - multilingual support
+  openai:
+    - "en"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "ja"
+    - "ko"
+    - "zh"
+    - "ru"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "pl"
+    - "tr"
+    - "multi"
+
+  # Google Gemini Live - multilingual support
+  gemini:
+    - "en"
+    - "es"
+    - "fr"
+    - "de"
+    - "it"
+    - "pt"
+    - "ja"
+    - "ko"
+    - "zh"
+    - "ru"
+    - "ar"
+    - "hi"
+    - "nl"
+    - "pl"
+    - "tr"
+    - "vi"
+    - "th"
+    - "id"
+    - "multi"
