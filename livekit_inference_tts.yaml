@@ -1,7 +1,8 @@
 # LiveKit Inference TTS Models - Pricing & Metadata
-# Last updated: 2026-01-28
 # Prices are in USD per million characters
 # Source: https://livekit.io/pricing/inference
+
+last_updated: "2026-02-09"
 
 models:
   # =============================================================================
@@ -85,7 +86,7 @@ models:
   # ElevenLabs Models
   # =============================================================================
 
-  - model_id: "elevenlabs/eleven-flash-v2"
+  - model_id: "elevenlabs/eleven_flash_v2"
     display_name: "Eleven Flash v2"
     provider: "elevenlabs"
     languages: ["en"]
@@ -96,10 +97,10 @@ models:
       build_ship_per_1m_chars: 150.00
       scale_per_1m_chars: 60.00
 
-  - model_id: "elevenlabs/eleven-flash-v2.5"
+  - model_id: "elevenlabs/eleven_flash_v2_5"
     display_name: "Eleven Flash v2.5"
     provider: "elevenlabs"
-    languages: ["en"]
+    languages: ["en", "multilingual"]
     features: ["streaming", "low_latency", "voice_cloning", "improved_quality"]
     speed: "fast"
     tier: "flagship"
@@ -108,7 +109,7 @@ models:
       build_ship_per_1m_chars: 150.00
       scale_per_1m_chars: 60.00
 
-  - model_id: "elevenlabs/eleven-turbo-v2"
+  - model_id: "elevenlabs/eleven_turbo_v2"
     display_name: "Eleven Turbo v2"
     provider: "elevenlabs"
     languages: ["en"]
@@ -120,10 +121,10 @@ models:
       build_ship_per_1m_chars: 150.00
       scale_per_1m_chars: 60.00
 
-  - model_id: "elevenlabs/eleven-turbo-v2.5"
+  - model_id: "elevenlabs/eleven_turbo_v2_5"
     display_name: "Eleven Turbo v2.5"
     provider: "elevenlabs"
-    languages: ["en"]
+    languages: ["en", "multilingual"]
     features: ["streaming", "ultra_low_latency", "voice_cloning", "improved_quality"]
     speed: "fast"
     tier: "flagship"
@@ -132,7 +133,7 @@ models:
       build_ship_per_1m_chars: 150.00
       scale_per_1m_chars: 60.00
 
-  - model_id: "elevenlabs/eleven-multilingual-v2"
+  - model_id: "elevenlabs/eleven_multilingual_v2"
     display_name: "Eleven Multilingual v2"
     provider: "elevenlabs"
     languages: ["multilingual"]
@@ -198,10 +199,10 @@ models:
   # Rime Models
   # =============================================================================
 
-  - model_id: "rime/arcana-v2"
-    display_name: "Arcana V2"
+  - model_id: "rime/arcana"
+    display_name: "Arcana"
     provider: "rime"
-    languages: ["en"]
+    languages: ["en", "es", "fr", "de"]
     features: ["streaming", "low_latency", "expressive"]
     speed: "standard"
     tier: "flagship"
@@ -210,10 +211,10 @@ models:
       build_ship_per_1m_chars: 40.00
       scale_per_1m_chars: 30.00
 
-  - model_id: "rime/mist-v2"
-    display_name: "Mist V2"
+  - model_id: "rime/mistv2"
+    display_name: "Mist v2"
     provider: "rime"
-    languages: ["en"]
+    languages: ["en", "es", "fr", "de"]
     features: ["streaming", "low_latency"]
     speed: "fast"
     tier: "standard"

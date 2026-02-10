@@ -1,7 +1,8 @@
 # LiveKit Inference LLM Models - Pricing & Metadata
-# Last updated: 2026-01-28
 # Prices are in USD per 1M tokens
 # Source: https://livekit.io/pricing/inference
+
+last_updated: "2026-01-28"
 
 models:
   # =============================================================================
