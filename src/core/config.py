@@ -26,13 +26,21 @@ class Settings(BaseSettings):
     api_port: int = 8080
 
     # CORS - stored as comma-separated string, accessed via property
+    # Default "*" for development; set CORS_ORIGINS explicitly in production
     cors_origins_str: str = Field(default="*", alias="CORS_ORIGINS")
 
     @computed_field
     @property
     def cors_origins(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""
-        return [origin.strip() for origin in self.cors_origins_str.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.cors_origins_str.split(",") if origin.strip()]
+        if self.app_env == "production" and "*" in origins:
+            import logging
+            logging.getLogger("kwami-api.config").warning(
+                "CORS_ORIGINS is set to '*' in production. "
+                "Set CORS_ORIGINS to specific origins for security."
+            )
+        return origins
 
     # LiveKit
     livekit_url: str = Field(alias="LIVEKIT_URL")
