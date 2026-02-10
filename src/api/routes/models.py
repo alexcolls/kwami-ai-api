@@ -40,79 +40,72 @@ router = APIRouter()
 # Load LiveKit Inference Models from YAML
 # =============================================================================
 
-def _load_inference_llm_models() -> list[dict]:
-    """Load LLM models from YAML configuration."""
-    # Assuming running from root, or use relative path from this file
-    # This file is in src/api/routes/models.py
-    # Root is ../../../ (3 levels up)
-    yaml_path = Path(__file__).parents[3] / "livekit_inference_llm.yaml"
+def _load_yaml_config(filename: str) -> dict:
+    """Load a YAML config file from the project root.
+    
+    Returns the full parsed dict including 'models' and 'last_updated' fields.
+    """
+    yaml_path = Path(__file__).parents[3] / filename
     try:
         with open(yaml_path, "r") as f:
-            data = yaml.safe_load(f)
-            return data.get("models", [])
+            return yaml.safe_load(f) or {}
     except Exception as e:
-        logger.error(f"Failed to load inference LLM config from {yaml_path}: {e}")
-        return []
+        logger.error(f"Failed to load {filename} from {yaml_path}: {e}")
+        return {}
 
 
-# Cache the loaded models
-_INFERENCE_LLM_MODELS: list[dict] | None = None
+# Cached YAML data (full dict with models + last_updated)
+_INFERENCE_LLM_DATA: dict | None = None
+_INFERENCE_STT_DATA: dict | None = None
+_INFERENCE_TTS_DATA: dict | None = None
+
+
+def _get_inference_data(model_type: str) -> dict:
+    """Get cached inference YAML data for a model type."""
+    global _INFERENCE_LLM_DATA, _INFERENCE_STT_DATA, _INFERENCE_TTS_DATA
+    
+    filenames = {
+        "llm": "livekit_inference_llm.yaml",
+        "stt": "livekit_inference_stt.yaml",
+        "tts": "livekit_inference_tts.yaml",
+    }
+    caches = {
+        "llm": "_INFERENCE_LLM_DATA",
+        "stt": "_INFERENCE_STT_DATA",
+        "tts": "_INFERENCE_TTS_DATA",
+    }
+    
+    cache_ref = {"llm": _INFERENCE_LLM_DATA, "stt": _INFERENCE_STT_DATA, "tts": _INFERENCE_TTS_DATA}
+    if cache_ref[model_type] is None:
+        data = _load_yaml_config(filenames[model_type])
+        if model_type == "llm":
+            _INFERENCE_LLM_DATA = data
+        elif model_type == "stt":
+            _INFERENCE_STT_DATA = data
+        elif model_type == "tts":
+            _INFERENCE_TTS_DATA = data
+        return data
+    return cache_ref[model_type]
 
 
 def get_inference_llm_models() -> list[dict]:
     """Get cached inference LLM models."""
-    global _INFERENCE_LLM_MODELS
-    if _INFERENCE_LLM_MODELS is None:
-        _INFERENCE_LLM_MODELS = _load_inference_llm_models()
-    return _INFERENCE_LLM_MODELS
-
-
-def _load_inference_stt_models() -> list[dict]:
-    """Load STT models from YAML configuration."""
-    yaml_path = Path(__file__).parents[3] / "livekit_inference_stt.yaml"
-    try:
-        with open(yaml_path, "r") as f:
-            data = yaml.safe_load(f)
-            return data.get("models", [])
-    except Exception as e:
-        logger.error(f"Failed to load inference STT config from {yaml_path}: {e}")
-        return []
-
-
-# Cache the loaded STT models
-_INFERENCE_STT_MODELS: list[dict] | None = None
+    return _get_inference_data("llm").get("models", [])
 
 
 def get_inference_stt_models() -> list[dict]:
     """Get cached inference STT models."""
-    global _INFERENCE_STT_MODELS
-    if _INFERENCE_STT_MODELS is None:
-        _INFERENCE_STT_MODELS = _load_inference_stt_models()
-    return _INFERENCE_STT_MODELS
-
-
-def _load_inference_tts_models() -> list[dict]:
-    """Load TTS models from YAML configuration."""
-    yaml_path = Path(__file__).parents[3] / "livekit_inference_tts.yaml"
-    try:
-        with open(yaml_path, "r") as f:
-            data = yaml.safe_load(f)
-            return data.get("models", [])
-    except Exception as e:
-        logger.error(f"Failed to load inference TTS config from {yaml_path}: {e}")
-        return []
-
-
-# Cache the loaded TTS models
-_INFERENCE_TTS_MODELS: list[dict] | None = None
+    return _get_inference_data("stt").get("models", [])
 
 
 def get_inference_tts_models() -> list[dict]:
     """Get cached inference TTS models."""
-    global _INFERENCE_TTS_MODELS
-    if _INFERENCE_TTS_MODELS is None:
-        _INFERENCE_TTS_MODELS = _load_inference_tts_models()
-    return _INFERENCE_TTS_MODELS
+    return _get_inference_data("tts").get("models", [])
+
+
+def get_last_updated(model_type: str) -> str:
+    """Get the last_updated date from the YAML file for a model type."""
+    return _get_inference_data(model_type).get("last_updated", "unknown")
 
 
 # =============================================================================
@@ -582,7 +575,7 @@ async def get_llm_inference_models():
         ))
     
     return InferenceModelsResponse(
-        last_updated="2026-01-28",
+        last_updated=get_last_updated("llm"),
         models=models,
     )
 
@@ -662,7 +655,7 @@ async def get_stt_inference_models():
         ))
     
     return InferenceSTTResponse(
-        last_updated="2026-01-28",
+        last_updated=get_last_updated("stt"),
         models=models,
     )
 
@@ -674,10 +667,21 @@ async def get_stt_plugin_models():
     
     These require your own API keys for the respective providers.
     """
+    # Provider-aware language and feature defaults
+    stt_provider_info = {
+        "deepgram": {"languages": ["en", "multilingual"], "features": ["streaming", "punctuation", "smart_format"]},
+        "google": {"languages": ["en", "multilingual"], "features": ["streaming", "punctuation"]},
+        "groq": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+        "elevenlabs": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+        "cartesia": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+        "mistralai": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+    }
+    
     result = _get_stt_models()
     
     providers: dict[str, list[PluginSTTModel]] = {}
     for provider, model_ids in result["plugins"].items():
+        info = stt_provider_info.get(provider, {"languages": ["en"], "features": ["streaming"]})
         provider_models = []
         for model_id in model_ids:
             # Generate display name from model_id
@@ -687,8 +691,8 @@ async def get_stt_plugin_models():
                 model_id=model_id,
                 display_name=display_name,
                 provider=provider,
-                languages=["multilingual"] if "multilingual" in model_id.lower() else ["en"],
-                features=["streaming"],
+                languages=info["languages"],
+                features=info["features"],
                 speed="fast",
                 tier="standard",
             ))
@@ -735,7 +739,7 @@ async def get_tts_inference_models():
         ))
     
     return InferenceTTSResponse(
-        last_updated="2026-01-28",
+        last_updated=get_last_updated("tts"),
         models=models,
     )
 
@@ -747,10 +751,22 @@ async def get_tts_plugin_models():
     
     These require your own API keys for the respective providers.
     """
+    # Provider-aware language and feature defaults
+    tts_provider_info = {
+        "openai": {"languages": ["en"], "features": ["streaming"]},
+        "elevenlabs": {"languages": ["en", "multilingual"], "features": ["streaming", "voice_cloning"]},
+        "cartesia": {"languages": ["en", "multilingual"], "features": ["streaming", "low_latency", "voice_cloning"]},
+        "deepgram": {"languages": ["en"], "features": ["streaming", "low_latency"]},
+        "google": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+        "groq": {"languages": ["en", "multilingual"], "features": ["streaming"]},
+        "rime": {"languages": ["en", "es", "fr", "de"], "features": ["streaming", "low_latency", "expressive"]},
+    }
+    
     result = _get_tts_models()
     
     providers: dict[str, list[PluginTTSModel]] = {}
     for provider, model_ids in result["plugins"].items():
+        info = tts_provider_info.get(provider, {"languages": ["en"], "features": ["streaming"]})
         provider_models = []
         for model_id in model_ids:
             # Generate display name from model_id
@@ -760,8 +776,8 @@ async def get_tts_plugin_models():
                 model_id=model_id,
                 display_name=display_name,
                 provider=provider,
-                languages=["en"],
-                features=["streaming"],
+                languages=info["languages"],
+                features=info["features"],
                 speed="fast",
                 tier="standard",
             ))
