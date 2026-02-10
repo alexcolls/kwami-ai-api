@@ -28,6 +28,10 @@ dependencies = [
     "livekit-plugins-silero>=1.0.0",
     # Note: AWS plugin requires aws-sdk-bedrock-runtime for full functionality
     # Model listing uses fallback, so plugin is optional
+    # Graph analysis for memory operations
+    "networkx>=3.2.0",
+    "python-louvain>=0.16",
+    "thefuzz[speedup]>=0.22.0",
 ]
 
 [project.optional-dependencies]
