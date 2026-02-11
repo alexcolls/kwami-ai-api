@@ -1,10 +1,10 @@
 import pytest
 import jwt
 from unittest.mock import patch, MagicMock
-from fastapi import HTTPException
 
-from src.core.security import check_user_access, AuthUser, verify_with_secret
+from src.core.security import check_user_access, AuthUser, verify_token
 from src.core.config import settings
+
 
 def test_auth_user_model():
     """Test AuthUser model initialization."""
@@ -13,6 +13,7 @@ def test_auth_user_model():
     assert user.id == "123"
     assert user.email == "test@example.com"
     assert user.role == "admin"
+
 
 def test_check_user_access():
     """Test access control logic."""
@@ -26,35 +27,15 @@ def test_check_user_access():
     assert check_user_access(user, "user456") is False
     assert check_user_access(user, "kwami_user456") is False
 
-@patch("jwt.decode")
-def test_verify_with_secret(mock_decode):
-    """Test symmetric token verification."""
-    # Temporarily set secret
-    original_secret = settings.supabase_jwt_secret
-    settings.supabase_jwt_secret = "test-secret"
-    
-    try:
-        mock_decode.return_value = {"sub": "123"}
-        
-        result = verify_with_secret("fake-token")
-        
-        assert result["sub"] == "123"
-        mock_decode.assert_called_with(
-            "fake-token",
-            "test-secret",
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
-    finally:
-        settings.supabase_jwt_secret = original_secret
 
-def test_verify_with_secret_no_config():
-    """Test verification fails if secret not configured."""
-    original_secret = settings.supabase_jwt_secret
-    settings.supabase_jwt_secret = None
-    
+@pytest.mark.asyncio
+async def test_verify_token_no_jwks():
+    """Test verification fails if JWKS not configured."""
+    original_url = settings.supabase_url
+    settings.supabase_url = None
+
     try:
-        with pytest.raises(jwt.InvalidTokenError):
-            verify_with_secret("token")
+        with pytest.raises(jwt.InvalidTokenError, match="JWKS not configured"):
+            await verify_token("fake-token")
     finally:
-        settings.supabase_jwt_secret = original_secret
+        settings.supabase_url = original_url

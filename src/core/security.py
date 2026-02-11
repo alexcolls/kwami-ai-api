@@ -19,7 +19,7 @@ def get_jwks_client() -> Optional[PyJWKClient]:
     global _jwks_client
     if _jwks_client is None and settings.supabase_jwks_url:
         _jwks_client = PyJWKClient(settings.supabase_jwks_url, cache_keys=True)
-        logger.info(f"🔑 JWKS client initialized: {settings.supabase_jwks_url}")
+        logger.info(f"JWKS client initialized: {settings.supabase_jwks_url}")
     return _jwks_client
 
 
@@ -37,34 +37,36 @@ class AuthUser:
         return f"AuthUser(id={self.id}, email={self.email})"
 
 
-async def verify_with_jwks(token: str, alg: str) -> dict:
-    """Verify JWT using JWKS (for asymmetric algorithms)."""
+async def verify_token(token: str) -> dict:
+    """Verify a Supabase JWT using JWKS (asymmetric key verification).
+
+    Args:
+        token: The JWT string from the Authorization header.
+
+    Returns:
+        Decoded JWT payload.
+
+    Raises:
+        jwt.InvalidTokenError: If verification fails.
+    """
     jwks_client = get_jwks_client()
     if not jwks_client:
         raise jwt.InvalidTokenError(
-            "JWKS not configured. Set SUPABASE_URL for asymmetric key verification."
+            "JWKS not configured. Set SUPABASE_URL to enable authentication."
         )
-    
+
+    # Read algorithm from token header
+    try:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "RS256")
+    except Exception:
+        alg = "RS256"
+
     signing_key = jwks_client.get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
         signing_key.key,
         algorithms=[alg],
-        audience="authenticated",
-    )
-
-
-def verify_with_secret(token: str) -> dict:
-    """Verify JWT using shared secret (for HS256)."""
-    if not settings.supabase_jwt_secret:
-        raise jwt.InvalidTokenError(
-            "JWT secret not configured. Set SUPABASE_JWT_SECRET for HS256 verification."
-        )
-    
-    return jwt.decode(
-        token,
-        settings.supabase_jwt_secret,
-        algorithms=["HS256"],
         audience="authenticated",
     )
 
