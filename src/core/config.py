@@ -50,9 +50,17 @@ class Settings(BaseSettings):
     # Memory
     zep_api_key: str | None = Field(default=None, alias="ZEP_API_KEY")
 
-    # Supabase Auth
+    # Supabase
     supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
-    supabase_jwt_secret: str | None = Field(default=None, alias="SUPABASE_JWT_SECRET")
+    supabase_secret_key: str | None = Field(default=None, alias="SUPABASE_SECRET_KEY")
+
+    # Stripe
+    stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
+    stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
+    stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
+
+    # Internal API key (shared secret between agent and API)
+    internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
 
     @property
     def is_production(self) -> bool:
@@ -61,7 +69,7 @@ class Settings(BaseSettings):
     @property
     def auth_enabled(self) -> bool:
         """Check if authentication is configured."""
-        return self.supabase_url is not None or self.supabase_jwt_secret is not None
+        return self.supabase_url is not None
     
     @computed_field
     @property
