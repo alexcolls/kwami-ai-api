@@ -281,24 +281,41 @@ async def get_user_facts(
     user_id: str,
     user: Annotated[AuthUser, Depends(require_auth)],
     client: AsyncZep = Depends(get_zep_client),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
-    """Get all facts stored for a user via graph search (Zep v3)."""
+    """Get facts stored for a user via graph search (Zep v3) with pagination."""
     verify_user_access(user, user_id)
     try:
+        ZEP_FETCH_LIMIT = 1000
         # Zep v3 stores facts on graph edges - search for them
         facts_response = await client.graph.search(
             user_id=user_id,
             query="user information facts preferences",
             scope="edges",
-            limit=50,
+            limit=ZEP_FETCH_LIMIT,
         )
+        all_facts = []
         if facts_response and facts_response.edges:
-            return [edge.fact for edge in facts_response.edges if hasattr(edge, 'fact') and edge.fact]
-        return []
+            all_facts = [edge.fact for edge in facts_response.edges if hasattr(edge, 'fact') and edge.fact]
+        
+        # Apply pagination
+        total = len(all_facts)
+        paginated = all_facts[offset:offset + limit]
+        has_more = (offset + limit) < total
+        
+        return {
+            "facts": paginated,
+            "count": len(paginated),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": has_more,
+        }
     except Exception as e:
         # Check for 404 (user not found)
         if "404" in str(e):
-            return []
+            return {"facts": [], "count": 0, "total": 0, "offset": offset, "limit": limit, "has_more": False}
         logger.error(f"Failed to fetch facts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -713,9 +730,10 @@ async def get_user_edges(
     user_id: str,
     user: Annotated[AuthUser, Depends(require_auth)],
     client: AsyncZep = Depends(get_zep_client),
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
-    """Get all edges (facts with temporal data) for a user.
+    """Get edges (facts with temporal data) for a user with pagination.
     
     Edges represent facts/relationships in the knowledge graph. Each edge includes:
     - fact: The relationship description
@@ -723,24 +741,26 @@ async def get_user_edges(
     - invalid_at: When the fact became false (if superseded)
     - created_at: When Zep learned the fact
     - expired_at: When Zep learned the fact was no longer true
+    
+    Supports offset/limit pagination. Returns total count and has_more flag.
     """
     verify_user_access(user, user_id)
-    logger.info(f"🔗 Fetching edges for user: {user_id}")
+    logger.info(f"🔗 Fetching edges for user: {user_id} (offset={offset}, limit={limit})")
     try:
-        edges = []
+        ZEP_FETCH_LIMIT = 1000
+        all_edges = []
         
-        # Get edges directly from the graph API
+        # Get all edges from Zep (large batch)
         try:
-            edges_response = await client.graph.edge.get_by_user_id(user_id=user_id, limit=limit)
+            edges_response = await client.graph.edge.get_by_user_id(user_id=user_id, limit=ZEP_FETCH_LIMIT)
             if edges_response:
                 for edge in edges_response:
-                    edges.append({
+                    all_edges.append({
                         "uuid": edge.uuid_ if hasattr(edge, 'uuid_') else (edge.uuid if hasattr(edge, 'uuid') else None),
                         "fact": edge.fact if hasattr(edge, 'fact') else None,
                         "name": edge.name if hasattr(edge, 'name') else None,
                         "source_node_uuid": edge.source_node_uuid if hasattr(edge, 'source_node_uuid') else None,
                         "target_node_uuid": edge.target_node_uuid if hasattr(edge, 'target_node_uuid') else None,
-                        # Temporal data
                         "created_at": str(edge.created_at) if hasattr(edge, 'created_at') and edge.created_at else None,
                         "valid_at": str(edge.valid_at) if hasattr(edge, 'valid_at') and edge.valid_at else None,
                         "invalid_at": str(edge.invalid_at) if hasattr(edge, 'invalid_at') and edge.invalid_at else None,
@@ -754,11 +774,11 @@ async def get_user_edges(
                     user_id=user_id,
                     query="*",
                     scope="edges",
-                    limit=limit,
+                    limit=ZEP_FETCH_LIMIT,
                 )
                 if facts_response and facts_response.edges:
                     for edge in facts_response.edges:
-                        edges.append({
+                        all_edges.append({
                             "uuid": edge.uuid_ if hasattr(edge, 'uuid_') else (edge.uuid if hasattr(edge, 'uuid') else None),
                             "fact": edge.fact if hasattr(edge, 'fact') else None,
                             "name": edge.name if hasattr(edge, 'name') else None,
@@ -772,8 +792,20 @@ async def get_user_edges(
             except Exception as search_err:
                 logger.warning(f"🔗 Fallback graph.search also failed: {search_err}")
         
-        logger.info(f"🔗 Found {len(edges)} edges")
-        return {"edges": edges, "count": len(edges)}
+        # Apply pagination
+        total = len(all_edges)
+        paginated = all_edges[offset:offset + limit]
+        has_more = (offset + limit) < total
+        
+        logger.info(f"🔗 Found {total} total edges, returning {len(paginated)} (offset={offset})")
+        return {
+            "edges": paginated,
+            "count": len(paginated),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": has_more,
+        }
         
     except Exception as e:
         logger.error(f"Failed to fetch edges: {e}")
@@ -785,25 +817,29 @@ async def get_user_nodes(
     user_id: str,
     user: Annotated[AuthUser, Depends(require_auth)],
     client: AsyncZep = Depends(get_zep_client),
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
-    """Get all nodes (entities with summaries) for a user.
+    """Get nodes (entities with summaries) for a user with pagination.
     
     Nodes represent entities in the knowledge graph. Each node includes:
     - name: The entity name
     - summary: AI-generated overview of the entity
     - labels: Type categorization
+    
+    Supports offset/limit pagination. Returns total count and has_more flag.
     """
     verify_user_access(user, user_id)
-    logger.info(f"🔵 Fetching nodes for user: {user_id}")
+    logger.info(f"🔵 Fetching nodes for user: {user_id} (offset={offset}, limit={limit})")
     try:
-        nodes = []
+        ZEP_FETCH_LIMIT = 1000
+        all_nodes = []
         
         try:
-            nodes_response = await client.graph.node.get_by_user_id(user_id=user_id, limit=limit)
+            nodes_response = await client.graph.node.get_by_user_id(user_id=user_id, limit=ZEP_FETCH_LIMIT)
             if nodes_response:
                 for node in nodes_response:
-                    nodes.append({
+                    all_nodes.append({
                         "uuid": node.uuid_ if hasattr(node, 'uuid_') else (node.uuid if hasattr(node, 'uuid') else None),
                         "name": node.name if hasattr(node, 'name') else None,
                         "summary": node.summary if hasattr(node, 'summary') else None,
@@ -813,8 +849,20 @@ async def get_user_nodes(
         except Exception as e:
             logger.warning(f"🔵 graph.node.get_by_user_id failed: {e}")
         
-        logger.info(f"🔵 Found {len(nodes)} nodes")
-        return {"nodes": nodes, "count": len(nodes)}
+        # Apply pagination
+        total = len(all_nodes)
+        paginated = all_nodes[offset:offset + limit]
+        has_more = (offset + limit) < total
+        
+        logger.info(f"🔵 Found {total} total nodes, returning {len(paginated)} (offset={offset})")
+        return {
+            "nodes": paginated,
+            "count": len(paginated),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": has_more,
+        }
         
     except Exception as e:
         logger.error(f"Failed to fetch nodes: {e}")
@@ -1042,9 +1090,10 @@ async def get_entities_by_type(
     entity_type: str,
     user: Annotated[AuthUser, Depends(require_auth)],
     client: AsyncZep = Depends(get_zep_client),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
-    """Get all entities of a specific type from the knowledge graph.
+    """Get entities of a specific type from the knowledge graph with pagination.
     
     Examples:
     - GET /memory/{user_id}/entities/Preference - Get all user preferences
@@ -1055,12 +1104,13 @@ async def get_entities_by_type(
     logger.info(f"🏷️ Fetching {entity_type} entities for user: {user_id}")
     
     try:
-        entities = []
+        ZEP_FETCH_LIMIT = 1000
+        all_entities = []
         
         # Get all nodes and filter by type
         nodes_response = await client.graph.node.get_by_user_id(
             user_id=user_id,
-            limit=limit * 2,  # Get more to filter
+            limit=ZEP_FETCH_LIMIT,
         )
         
         if nodes_response:
@@ -1068,7 +1118,7 @@ async def get_entities_by_type(
                 node_labels = list(node.labels) if hasattr(node, 'labels') and node.labels else []
                 # Check if the entity type matches (case-insensitive)
                 if any(label.lower() == entity_type.lower() for label in node_labels):
-                    entities.append({
+                    all_entities.append({
                         "name": getattr(node, 'name', ''),
                         "type": node_labels[0] if node_labels else 'entity',
                         "labels": node_labels,
@@ -1076,13 +1126,20 @@ async def get_entities_by_type(
                         "uuid": getattr(node, 'uuid_', None) or getattr(node, 'uuid', None),
                         "created_at": str(node.created_at) if hasattr(node, 'created_at') and node.created_at else None,
                     })
-                    if len(entities) >= limit:
-                        break
+        
+        # Apply pagination
+        total = len(all_entities)
+        paginated = all_entities[offset:offset + limit]
+        has_more = (offset + limit) < total
         
         return {
             "entity_type": entity_type,
-            "entities": entities,
-            "count": len(entities),
+            "entities": paginated,
+            "count": len(paginated),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": has_more,
         }
         
     except Exception as e:
@@ -1273,14 +1330,15 @@ async def get_memory_graph(
     user_id: str,
     user: Annotated[AuthUser, Depends(require_auth)],
     client: AsyncZep = Depends(get_zep_client),
-    limit: int = 50,
+    limit: int = Query(1000, ge=1, le=5000),
 ):
     """Get the knowledge graph representation of the user's memory from Zep.
     
     Uses Zep entity labels when available, with smart keyword inference as fallback.
+    Fetches up to `limit` edges and nodes (default 1000) to build the full graph.
     """
     verify_user_access(user, user_id)
-    logger.info(f"📊 Fetching memory graph for user: {user_id}")
+    logger.info(f"📊 Fetching memory graph for user: {user_id} (limit={limit})")
     try:
         nodes = []
         edges = []
