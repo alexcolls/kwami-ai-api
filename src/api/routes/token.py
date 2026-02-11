@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.services.livekit import create_token
+from src.services.credits import get_balance
 from src.core.config import settings
 from src.api.deps import require_auth
 from src.core.security import AuthUser
@@ -72,6 +73,22 @@ async def generate_token(
     identity = user.id
     participant_name = user.email or request.participant_name or identity
     logger.info(f"📥 Token request: room={request.room_name}, user={user.id}, email={user.email}")
+
+    # Check credit balance before allowing connection
+    try:
+        credit_data = await get_balance(identity)
+        if credit_data["balance"] <= 0:
+            logger.warning(f"🚫 User {identity} has insufficient credits ({credit_data['balance']})")
+            raise HTTPException(
+                status_code=402,
+                detail="Insufficient credits. Please purchase credits to continue.",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # If credit check fails (e.g. DB unavailable), allow connection
+        # to avoid blocking users due to infrastructure issues
+        logger.error(f"Credit check failed, allowing connection: {e}")
 
     try:
         token = create_token(
