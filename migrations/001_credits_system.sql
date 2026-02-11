@@ -115,7 +115,7 @@ BEGIN
         'bonus',
         welcome_bonus,
         welcome_bonus,
-        'Welcome bonus - 500 free credits',
+        'Welcome bonus - 500 free energy',
         '{"reason": "welcome_bonus"}'::jsonb
     );
 

@@ -31,21 +31,21 @@ MARKUP_MULTIPLIER = 2.0  # 2x markup on raw provider costs
 CREDIT_PACKS = {
     "starter": {
         "id": "starter",
-        "name": "Starter",
+        "name": "Spark",
         "credits": 5_000,
         "price_cents": 500,  # $5.00
         "popular": False,
     },
     "standard": {
         "id": "standard",
-        "name": "Standard",
+        "name": "Surge",
         "credits": 25_000,
         "price_cents": 2500,  # $25.00
         "popular": True,
     },
     "pro": {
         "id": "pro",
-        "name": "Pro",
+        "name": "Overcharge",
         "credits": 100_000,
         "price_cents": 10000,  # $100.00
         "popular": False,

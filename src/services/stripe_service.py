@@ -56,8 +56,8 @@ async def create_checkout_session(
                     "currency": "usd",
                     "unit_amount": pack["price_cents"],
                     "product_data": {
-                        "name": f"Kwami AI Credits - {pack['name']}",
-                        "description": f"{pack['credits']:,} credits for Kwami AI",
+                        "name": f"Kwami Energy - {pack['name']}",
+                        "description": f"{pack['credits']:,} energy for your Kwami",
                     },
                 },
                 "quantity": 1,
