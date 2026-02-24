@@ -62,9 +62,17 @@ class Settings(BaseSettings):
     # Internal API key (shared secret between agent and API)
     internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
 
+    # Enable OpenAPI docs (/docs, /redoc) in production when set to true
+    enable_docs: bool = Field(default=False, alias="ENABLE_DOCS")
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def show_docs(self) -> bool:
+        """Whether to expose /docs and /redoc."""
+        return not self.is_production or self.enable_docs
     
     @property
     def auth_enabled(self) -> bool:

@@ -51,8 +51,8 @@ app = FastAPI(
     description="Token endpoint and configuration API for Kwami AI agents",
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
+    docs_url="/docs" if settings.show_docs else None,
+    redoc_url="/redoc" if settings.show_docs else None,
 )
 
 app.add_middleware(RequestLoggingMiddleware)
