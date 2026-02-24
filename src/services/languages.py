@@ -216,7 +216,7 @@ def _load_languages_yaml() -> dict:
     if _LANGUAGES_YAML is not None:
         return _LANGUAGES_YAML
     
-    yaml_path = Path(__file__).parents[2] / "livekit_languages.yaml"
+    yaml_path = Path(__file__).parents[2] / "config" / "livekit_languages.yaml"
     try:
         with open(yaml_path, "r") as f:
             _LANGUAGES_YAML = yaml.safe_load(f) or {}

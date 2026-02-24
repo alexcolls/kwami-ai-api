@@ -138,7 +138,7 @@ def _load_voices_yaml() -> dict:
     if _VOICES_YAML is not None:
         return _VOICES_YAML
     
-    yaml_path = Path(__file__).parents[2] / "livekit_voices.yaml"
+    yaml_path = Path(__file__).parents[2] / "config" / "livekit_voices.yaml"
     try:
         with open(yaml_path, "r") as f:
             _VOICES_YAML = yaml.safe_load(f) or {}

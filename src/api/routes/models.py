@@ -41,11 +41,11 @@ router = APIRouter()
 # =============================================================================
 
 def _load_yaml_config(filename: str) -> dict:
-    """Load a YAML config file from the project root.
+    """Load a YAML config file from the project config folder.
     
     Returns the full parsed dict including 'models' and 'last_updated' fields.
     """
-    yaml_path = Path(__file__).parents[3] / filename
+    yaml_path = Path(__file__).parents[3] / "config" / filename
     try:
         with open(yaml_path, "r") as f:
             return yaml.safe_load(f) or {}
