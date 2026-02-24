@@ -74,14 +74,19 @@ async def verify_token(token: str) -> dict:
 def check_user_access(user: AuthUser, user_id: str) -> bool:
     """
     Check if the authenticated user has access to the requested user_id.
-    
+
     Returns True if:
-    - User is authenticated and the user_id matches their ID
-    
-    Returns False if:
-    - User ID doesn't match the authenticated user
+    - user_id equals the user's ID, or
+    - user_id is "kwami_<user.id>" (legacy), or
+    - user_id starts with "kwami_<user.id>_" (per-kwami memory: each kwami has its own memory)
+
+    Returns False otherwise.
     """
-    # User can only access their own data
-    # Note: user_id in the request may have a "kwami_" prefix
+    if user.id == user_id:
+        return True
+    if user_id == f"kwami_{user.id}":
+        return True
+    if user_id.startswith(f"kwami_{user.id}_"):
+        return True
     clean_user_id = user_id.replace("kwami_", "")
-    return user.id == clean_user_id or user.id == user_id
+    return user.id == clean_user_id
