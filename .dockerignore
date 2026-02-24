@@ -1,0 +1,30 @@
+# Dependencies and local env
+.venv
+venv
+.env
+.env.*
+!.env.sample
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+*.md
+
+# Tests and dev
+tests
+.pytest_cache
+.coverage
+htmlcov
+*.egg-info
+
+# Deploy config (not needed in image)
+fly.toml
+.dockerignore
+
+# Misc
+__pycache__
+*.pyc
+*.pyo
+.ruff_cache
+.mypy_cache

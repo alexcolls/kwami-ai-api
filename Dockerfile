@@ -10,7 +10,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY . .
@@ -21,4 +21,5 @@ ENV APP_ENV=production
 ENV API_HOST=0.0.0.0
 ENV API_PORT=8080
 
-CMD ["uv", "run", "kwami-api"]
+# Run as module (project.scripts not installed when project isn't packaged)
+CMD ["uv", "run", "python", "-m", "src.main"]
