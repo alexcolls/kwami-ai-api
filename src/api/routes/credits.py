@@ -4,7 +4,7 @@ Provides endpoints for:
 - Viewing credit balance and transaction history
 - Purchasing credits via Stripe Checkout
 - Stripe webhook for payment confirmation
-- Agent usage reporting (internal API key auth)
+- Agent usage reporting (Kwami API key auth)
 """
 
 import logging
@@ -279,20 +279,20 @@ async def stripe_webhook(request: Request):
 
 
 # =============================================================================
-# Endpoints - Agent Usage Report (internal API key auth)
+# Endpoints - Agent Usage Report (Kwami API key auth)
 # =============================================================================
 
 
-def _verify_internal_api_key(
+def _verify_kwami_api_key(
     x_api_key: Annotated[Optional[str], Header()] = None,
 ) -> None:
-    """Verify the internal API key used by the agent to report usage."""
-    if not settings.internal_api_key:
+    """Verify the Kwami API key used by the agent to report usage."""
+    if not settings.kwami_api_key:
         raise HTTPException(
             status_code=503,
-            detail="Internal API not configured",
+            detail="Kwami API key not configured",
         )
-    if x_api_key != settings.internal_api_key:
+    if x_api_key != settings.kwami_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
@@ -302,12 +302,12 @@ def _verify_internal_api_key(
 @router.post("/usage/report", response_model=UsageReportResponse)
 async def report_usage(
     request: UsageReportRequest,
-    _: Annotated[None, Depends(_verify_internal_api_key)],
+    _: Annotated[None, Depends(_verify_kwami_api_key)],
 ):
     """Report AI usage from the agent after a session ends.
 
     This endpoint is called by the LiveKit agent (not the frontend).
-    Authenticated via an internal API key (X-API-Key header).
+    Authenticated via Kwami API key (X-API-Key header).
     """
     logger.info(
         f"Usage report received: user={request.user_id}, "

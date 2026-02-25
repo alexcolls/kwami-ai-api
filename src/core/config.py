@@ -59,8 +59,8 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
 
-    # Internal API key (shared secret between agent and API)
-    internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
+    # Kwami API key (shared secret between agent and API for usage reporting)
+    kwami_api_key: str | None = Field(default=None, alias="KWAMI_API_KEY")
 
     # Enable OpenAPI docs (/docs, /redoc) in production when set to true
     enable_docs: bool = Field(default=False, alias="ENABLE_DOCS")
