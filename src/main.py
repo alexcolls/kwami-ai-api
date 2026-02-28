@@ -39,9 +39,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info(f"🚀 Starting {settings.app_name} v0.1.0")
+    logger.info(f"🌐 Listening on {settings.api_host}:{settings.api_port}")
     logger.info(f"📡 LiveKit URL: {settings.livekit_url}")
     logger.info(f"🔑 API Key: {settings.livekit_api_key[:8]}...")
     logger.info(f"🌍 Environment: {settings.app_env}")
+    if settings.kwami_api_key and settings.kwami_api_key.strip():
+        logger.info("📊 Kwami API key for usage report: set")
+    else:
+        logger.warning("📊 Kwami API key for usage report: NOT SET (agent usage reports will get 503)")
     yield
     logger.info("👋 Shutting down...")
 

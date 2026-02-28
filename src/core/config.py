@@ -1,10 +1,16 @@
 """Application settings using pydantic-settings."""
 
+import os
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_port() -> int:
+    """Use PORT (Fly.io, Heroku) or API_PORT or 8080."""
+    return int(os.environ.get("PORT") or os.environ.get("API_PORT") or "8080")
 
 
 class Settings(BaseSettings):
@@ -21,9 +27,9 @@ class Settings(BaseSettings):
     app_env: Literal["development", "staging", "production"] = "development"
     debug: bool = False
 
-    # API Server
-    api_host: str = "0.0.0.0"
-    api_port: int = 8080
+    # API Server - must listen on 0.0.0.0 and port from Fly.io (PORT) or API_PORT
+    api_host: str = Field(default="0.0.0.0", alias="API_HOST")
+    api_port: int = Field(default_factory=_default_port, alias="API_PORT")
 
     # CORS - stored as comma-separated string, accessed via property
     # Default "*" for development; set CORS_ORIGINS explicitly in production
