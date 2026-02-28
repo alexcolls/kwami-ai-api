@@ -284,13 +284,13 @@ async def stripe_webhook(request: Request):
 
 
 def _verify_kwami_api_key(
-    x_api_key: Annotated[Optional[str], Header()] = None,
+    x_api_key: Annotated[Optional[str], Header(alias="X-API-Key")] = None,
 ) -> None:
     """Verify the Kwami API key used by the agent to report usage."""
-    if not settings.kwami_api_key:
+    if not settings.kwami_api_key or not settings.kwami_api_key.strip():
         raise HTTPException(
             status_code=503,
-            detail="Kwami API key not configured",
+            detail="Kwami API key not configured (set KWAMI_API_KEY on the API server)",
         )
     if x_api_key != settings.kwami_api_key:
         raise HTTPException(
