@@ -2,7 +2,13 @@ import pytest
 import jwt
 from unittest.mock import patch, MagicMock
 
-from src.core.security import check_user_access, AuthUser, verify_token
+from src.core.security import (
+    AuthUser,
+    check_user_access,
+    is_admin_user,
+    is_valid_admin_api_key,
+    verify_token,
+)
 from src.core.config import settings
 
 
@@ -39,3 +45,25 @@ async def test_verify_token_no_jwks():
             await verify_token("fake-token")
     finally:
         settings.supabase_url = original_url
+
+
+def test_is_admin_user_by_email():
+    original = settings.admin_emails_str
+    settings.admin_emails_str = "admin@example.com, owner@example.com"
+
+    try:
+        assert is_admin_user(AuthUser({"sub": "1", "email": "admin@example.com"})) is True
+        assert is_admin_user(AuthUser({"sub": "2", "email": "user@example.com"})) is False
+    finally:
+        settings.admin_emails_str = original
+
+
+def test_is_valid_admin_api_key():
+    original = settings.admin_api_key
+    settings.admin_api_key = "secret-admin-key"
+
+    try:
+        assert is_valid_admin_api_key("secret-admin-key") is True
+        assert is_valid_admin_api_key("wrong-key") is False
+    finally:
+        settings.admin_api_key = original
