@@ -8,6 +8,7 @@ Provides endpoints for:
 """
 
 import logging
+from datetime import datetime
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -20,6 +21,7 @@ from src.services.credits import (
     CREDIT_PACKS,
     MICRO_CREDITS_PER_CREDIT,
     get_balance,
+    get_reconciliation_report,
     get_transactions,
     get_usage_logs,
     process_usage_report,
@@ -103,7 +105,15 @@ class UsageLogItem(BaseModel):
     model_id: str
     units_used: float
     cost_usd: float
+    provider_cost_usd: float | None = None
+    billed_cost_usd: float | None = None
+    margin_usd: float | None = None
+    requested_credits: int | None = None
     credits_charged: int
+    settlement_status: str | None = None
+    pricing_version: str | None = None
+    pricing_source: str | None = None
+    usage_metadata: dict | None = None
     created_at: str
 
 
@@ -120,6 +130,15 @@ class UsageReportItem(BaseModel):
     model_type: str = Field(..., description="stt, llm, tts, or realtime")
     model_id: str = Field(..., description="Model identifier")
     units_used: float = Field(..., description="Tokens, minutes, or characters")
+    prompt_tokens: int | None = Field(None, description="Prompt/input tokens for LLM usage")
+    completion_tokens: int | None = Field(None, description="Completion/output tokens for LLM usage")
+    cached_input_tokens: int | None = Field(None, description="Cached input tokens if the provider supports them")
+    audio_input_minutes: float | None = Field(None, description="Realtime audio input minutes when available")
+    audio_output_minutes: float | None = Field(None, description="Realtime audio output minutes when available")
+    text_input_tokens: int | None = Field(None, description="Realtime text input tokens when available")
+    text_output_tokens: int | None = Field(None, description="Realtime text output tokens when available")
+    request_count: int | None = Field(None, description="Request count for tool or memory operations")
+    event_count: int | None = Field(None, description="How many events were aggregated into this item")
 
 
 class UsageReportRequest(BaseModel):
@@ -133,9 +152,66 @@ class UsageReportRequest(BaseModel):
 class UsageReportResponse(BaseModel):
     """Response from processing a usage report."""
 
+    total_credits_requested: int
     total_credits_charged: int
     new_balance: int
+    total_provider_cost_usd: float
+    total_billed_cost_usd: float
+    total_margin_usd: float
+    settlement_status: str
     items_processed: int
+
+
+class ReconciliationSummary(BaseModel):
+    usage_rows: int
+    sessions_count: int
+    total_provider_cost_usd: float
+    total_billed_cost_usd: float
+    total_margin_usd: float
+    total_requested_credits: int
+    total_charged_credits: int
+    charged_rows: int
+    pending_rows: int
+    insufficient_rows: int
+    fallback_rows: int
+    effective_margin_percent: float
+
+
+class ProviderReconciliationItem(BaseModel):
+    provider: str
+    usage_rows: int
+    sessions_count: int
+    provider_cost_usd: float
+    billed_cost_usd: float
+    margin_usd: float
+    margin_percent: float
+    requested_credits: int
+    charged_credits: int
+
+
+class SessionReconciliationItem(BaseModel):
+    session_id: str
+    usage_rows: int
+    providers: list[str]
+    provider_cost_usd: float
+    billed_cost_usd: float
+    margin_usd: float
+    requested_credits: int
+    charged_credits: int
+    settlement_status: str
+
+
+class ReconciliationAnomaly(BaseModel):
+    type: str
+    count: int
+
+
+class ReconciliationResponse(BaseModel):
+    summary: ReconciliationSummary
+    provider_breakdown: list[ProviderReconciliationItem]
+    session_breakdown: list[SessionReconciliationItem]
+    anomalies: list[ReconciliationAnomaly]
+    log_rows_scanned: int
 
 
 # =============================================================================
@@ -243,12 +319,39 @@ async def get_credit_usage(
             model_id=l["model_id"],
             units_used=l["units_used"],
             cost_usd=l["cost_usd"],
+            provider_cost_usd=l.get("provider_cost_usd"),
+            billed_cost_usd=l.get("billed_cost_usd"),
+            margin_usd=l.get("margin_usd"),
+            requested_credits=l.get("requested_credits"),
             credits_charged=l["credits_charged"],
+            settlement_status=l.get("settlement_status"),
+            pricing_version=l.get("pricing_version"),
+            pricing_source=l.get("pricing_source"),
+            usage_metadata=l.get("usage_metadata"),
             created_at=l["created_at"],
         )
         for l in logs
     ]
     return UsageLogsResponse(logs=items, count=len(items))
+
+
+@router.get("/reconciliation", response_model=ReconciliationResponse)
+async def get_credit_reconciliation(
+    user: Annotated[AuthUser, Depends(require_auth)],
+    limit: int = Query(500, ge=1, le=2000),
+    session_id: Optional[str] = Query(None),
+    created_after: Optional[datetime] = Query(None),
+    created_before: Optional[datetime] = Query(None),
+):
+    """Get a reconciliation-ready ledger summary for the current user."""
+    report = await get_reconciliation_report(
+        user.id,
+        limit=limit,
+        session_id=session_id,
+        created_after=created_after,
+        created_before=created_before,
+    )
+    return ReconciliationResponse(**report)
 
 
 # =============================================================================
@@ -319,6 +422,15 @@ async def report_usage(
             "model_type": item.model_type,
             "model_id": item.model_id,
             "units_used": item.units_used,
+            "prompt_tokens": item.prompt_tokens,
+            "completion_tokens": item.completion_tokens,
+            "cached_input_tokens": item.cached_input_tokens,
+            "audio_input_minutes": item.audio_input_minutes,
+            "audio_output_minutes": item.audio_output_minutes,
+            "text_input_tokens": item.text_input_tokens,
+            "text_output_tokens": item.text_output_tokens,
+            "request_count": item.request_count,
+            "event_count": item.event_count,
         }
         for item in request.usage
     ]
@@ -330,7 +442,12 @@ async def report_usage(
     )
 
     return UsageReportResponse(
+        total_credits_requested=result["total_credits_requested"],
         total_credits_charged=result["total_credits_charged"],
         new_balance=result["new_balance"],
+        total_provider_cost_usd=result["total_provider_cost_usd"],
+        total_billed_cost_usd=result["total_billed_cost_usd"],
+        total_margin_usd=result["total_margin_usd"],
+        settlement_status=result["settlement_status"],
         items_processed=len(result["items"]),
     )

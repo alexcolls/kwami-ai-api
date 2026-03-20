@@ -1,44 +1,57 @@
-"""Model pricing configuration.
+"""Canonical provider pricing used by the credits ledger.
 
-This file contains pricing information for AI models used with LiveKit.
-Prices are in USD per 1M tokens (or per minute for audio models).
-
-Update this file when provider pricing changes.
-Last updated: 2026-01-28
+This module is the API's source of truth for converting measured provider usage
+into raw provider cost. Customer billing policy is applied later on top of these
+raw costs so the ledger can report revenue and margin separately.
 """
 
 from typing import Literal
+
 from pydantic import BaseModel
+
+from src.core.config import settings
+
+PRICING_VERSION = settings.billing_pricing_version
 
 
 class TokenPricing(BaseModel):
     """Pricing for token-based models (LLM)."""
-    input_per_1m: float  # USD per 1M input tokens
-    output_per_1m: float  # USD per 1M output tokens
-    cached_input_per_1m: float | None = None  # USD per 1M cached input tokens (if supported)
+
+    input_per_1m: float
+    output_per_1m: float
+    cached_input_per_1m: float | None = None
 
 
 class AudioPricing(BaseModel):
     """Pricing for audio-based models (STT/TTS)."""
-    per_minute: float | None = None  # USD per minute
-    per_1m_characters: float | None = None  # USD per 1M characters (for TTS)
+
+    per_minute: float | None = None
+    per_1m_characters: float | None = None
 
 
 class RealtimePricing(BaseModel):
-    """Pricing for realtime models (audio in/out)."""
-    audio_input_per_minute: float  # USD per minute of audio input
-    audio_output_per_minute: float  # USD per minute of audio output
-    text_input_per_1m: float | None = None  # USD per 1M text input tokens
-    text_output_per_1m: float | None = None  # USD per 1M text output tokens
+    """Pricing for realtime models (audio and optional text units)."""
+
+    audio_input_per_minute: float
+    audio_output_per_minute: float
+    text_input_per_1m: float | None = None
+    text_output_per_1m: float | None = None
+
+
+class ExternalPricing(BaseModel):
+    """Pricing for request-based external services such as search or memory."""
+
+    per_call: float
 
 
 class ModelPricing(BaseModel):
-    """Complete pricing info for a model."""
+    """Complete provider pricing info for a billable usage source."""
+
     model_id: str
     provider: str
-    model_type: Literal["llm", "stt", "tts", "realtime"]
+    model_type: Literal["llm", "stt", "tts", "realtime", "tool", "memory"]
     display_name: str
-    pricing: TokenPricing | AudioPricing | RealtimePricing
+    pricing: TokenPricing | AudioPricing | RealtimePricing | ExternalPricing
     notes: str | None = None
 
 
@@ -278,6 +291,96 @@ REALTIME_PRICING: dict[str, ModelPricing] = {
 }
 
 # =============================================================================
+# External Services Pricing
+# =============================================================================
+
+EXTERNAL_PRICING: dict[str, ModelPricing] = {
+    "tavily/search": ModelPricing(
+        model_id="tavily/search",
+        provider="tavily",
+        model_type="tool",
+        display_name="Tavily Search",
+        pricing=ExternalPricing(per_call=settings.billing_tavily_search_per_call_usd),
+        notes="Configure BILLING_TAVILY_SEARCH_PER_CALL_USD for your Tavily plan.",
+    ),
+    "tavily/extract": ModelPricing(
+        model_id="tavily/extract",
+        provider="tavily",
+        model_type="tool",
+        display_name="Tavily Extract",
+        pricing=ExternalPricing(per_call=settings.billing_tavily_extract_per_call_usd),
+        notes="Configure BILLING_TAVILY_EXTRACT_PER_CALL_USD for your Tavily plan.",
+    ),
+    "serpapi/google_shopping": ModelPricing(
+        model_id="serpapi/google_shopping",
+        provider="serpapi",
+        model_type="tool",
+        display_name="SerpApi Google Shopping",
+        pricing=ExternalPricing(per_call=settings.billing_serpapi_search_per_call_usd),
+        notes="Configure BILLING_SERPAPI_SEARCH_PER_CALL_USD for your SerpApi plan.",
+    ),
+    "microlink/fetch": ModelPricing(
+        model_id="microlink/fetch",
+        provider="microlink",
+        model_type="tool",
+        display_name="Microlink Fetch",
+        pricing=ExternalPricing(per_call=settings.billing_microlink_fetch_per_call_usd),
+        notes="Configure BILLING_MICROLINK_FETCH_PER_CALL_USD if Microlink is billable on your plan.",
+    ),
+    "zep/add_messages": ModelPricing(
+        model_id="zep/add_messages",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Add Messages",
+        pricing=ExternalPricing(per_call=settings.billing_zep_add_messages_per_call_usd),
+        notes="Configure BILLING_ZEP_ADD_MESSAGES_PER_CALL_USD for your Zep plan.",
+    ),
+    "zep/get_context": ModelPricing(
+        model_id="zep/get_context",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Get Context",
+        pricing=ExternalPricing(per_call=settings.billing_zep_get_context_per_call_usd),
+        notes="Configure BILLING_ZEP_GET_CONTEXT_PER_CALL_USD for your Zep plan.",
+    ),
+    "zep/thread_search": ModelPricing(
+        model_id="zep/thread_search",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Thread Search",
+        pricing=ExternalPricing(per_call=settings.billing_zep_search_per_call_usd),
+    ),
+    "zep/graph_search": ModelPricing(
+        model_id="zep/graph_search",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Graph Search",
+        pricing=ExternalPricing(per_call=settings.billing_zep_search_per_call_usd),
+    ),
+    "zep/get_user_name": ModelPricing(
+        model_id="zep/get_user_name",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Get User Name",
+        pricing=ExternalPricing(per_call=settings.billing_zep_get_user_name_per_call_usd),
+    ),
+    "zep/create_user": ModelPricing(
+        model_id="zep/create_user",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Create User",
+        pricing=ExternalPricing(per_call=settings.billing_zep_create_user_per_call_usd),
+    ),
+    "zep/create_thread": ModelPricing(
+        model_id="zep/create_thread",
+        provider="zep",
+        model_type="memory",
+        display_name="Zep Create Thread",
+        pricing=ExternalPricing(per_call=settings.billing_zep_create_thread_per_call_usd),
+    ),
+}
+
+# =============================================================================
 # Combined pricing dictionary
 # =============================================================================
 
@@ -286,10 +389,75 @@ ALL_PRICING: dict[str, ModelPricing] = {
     **STT_PRICING,
     **TTS_PRICING,
     **REALTIME_PRICING,
+    **EXTERNAL_PRICING,
 }
 
 
-def get_pricing_by_type(model_type: Literal["llm", "stt", "tts", "realtime"]) -> dict[str, ModelPricing]:
+def calculate_token_cost(
+    pricing: TokenPricing,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cached_input_tokens: int = 0,
+) -> float:
+    """Calculate exact token cost from prompt, completion, and cached tokens."""
+    cached_input_tokens = max(cached_input_tokens, 0)
+    non_cached_prompt_tokens = max(prompt_tokens - cached_input_tokens, 0)
+    prompt_cost = (non_cached_prompt_tokens / 1_000_000) * pricing.input_per_1m
+    completion_cost = (completion_tokens / 1_000_000) * pricing.output_per_1m
+    cached_cost = 0.0
+    if cached_input_tokens and pricing.cached_input_per_1m is not None:
+        cached_cost = (cached_input_tokens / 1_000_000) * pricing.cached_input_per_1m
+    elif cached_input_tokens:
+        cached_cost = (cached_input_tokens / 1_000_000) * pricing.input_per_1m
+    return prompt_cost + completion_cost + cached_cost
+
+
+def calculate_audio_cost(pricing: AudioPricing, units_used: float) -> float:
+    """Calculate cost for STT or TTS units."""
+    if pricing.per_minute is not None:
+        return units_used * pricing.per_minute
+    if pricing.per_1m_characters is not None:
+        return (units_used / 1_000_000) * pricing.per_1m_characters
+    return 0.0
+
+
+def calculate_realtime_cost(
+    pricing: RealtimePricing,
+    *,
+    audio_input_minutes: float = 0.0,
+    audio_output_minutes: float = 0.0,
+    text_input_tokens: int = 0,
+    text_output_tokens: int = 0,
+    fallback_minutes: float = 0.0,
+) -> float:
+    """Calculate realtime cost from the most detailed units available."""
+    has_detailed_audio = audio_input_minutes > 0 or audio_output_minutes > 0
+    has_detailed_text = text_input_tokens > 0 or text_output_tokens > 0
+
+    if not has_detailed_audio and not has_detailed_text:
+        average_audio = (
+            pricing.audio_input_per_minute + pricing.audio_output_per_minute
+        ) / 2
+        return fallback_minutes * average_audio
+
+    cost = 0.0
+    cost += audio_input_minutes * pricing.audio_input_per_minute
+    cost += audio_output_minutes * pricing.audio_output_per_minute
+    if pricing.text_input_per_1m is not None:
+        cost += (text_input_tokens / 1_000_000) * pricing.text_input_per_1m
+    if pricing.text_output_per_1m is not None:
+        cost += (text_output_tokens / 1_000_000) * pricing.text_output_per_1m
+    return cost
+
+
+def calculate_external_cost(pricing: ExternalPricing, units_used: float) -> float:
+    """Calculate cost for request-based external services."""
+    return units_used * pricing.per_call
+
+
+def get_pricing_by_type(
+    model_type: Literal["llm", "stt", "tts", "realtime", "tool", "memory"],
+) -> dict[str, ModelPricing]:
     """Get all pricing for a specific model type."""
     match model_type:
         case "llm":
@@ -300,6 +468,12 @@ def get_pricing_by_type(model_type: Literal["llm", "stt", "tts", "realtime"]) ->
             return TTS_PRICING
         case "realtime":
             return REALTIME_PRICING
+        case "tool" | "memory":
+            return {
+                model_id: pricing
+                for model_id, pricing in EXTERNAL_PRICING.items()
+                if pricing.model_type == model_type
+            }
 
 
 def get_model_pricing(model_id: str) -> ModelPricing | None:
