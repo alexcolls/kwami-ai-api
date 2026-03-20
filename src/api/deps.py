@@ -4,11 +4,17 @@ import logging
 from typing import Annotated, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.config import settings
-from src.core.security import AuthUser, verify_token
+from src.core.security import (
+    AdminPrincipal,
+    AuthUser,
+    is_admin_user,
+    is_valid_admin_api_key,
+    verify_token,
+)
 
 logger = logging.getLogger("kwami-api.deps")
 
@@ -83,3 +89,27 @@ async def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def require_admin(
+    user: Annotated[Optional[AuthUser], Depends(get_current_user)],
+    x_admin_api_key: Annotated[Optional[str], Header(alias="X-Admin-API-Key")] = None,
+) -> AdminPrincipal:
+    """Require an admin identity via API key or authenticated allowlist."""
+    if is_valid_admin_api_key(x_admin_api_key):
+        return AdminPrincipal(auth_method="api_key")
+
+    if is_admin_user(user):
+        return AdminPrincipal(
+            auth_method="user",
+            user_id=user.id if user else None,
+            email=user.email if user else None,
+        )
+
+    detail = "Admin access required"
+    if settings.admin_api_key or settings.admin_emails:
+        detail = "Valid admin credentials required"
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=detail,
+    )
