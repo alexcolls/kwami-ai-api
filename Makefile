@@ -45,13 +45,13 @@ format:
 # =============================================================================
 
 docker-build:
-	docker build -t kwami-ai-api .
+	docker build -t kwami-lk-api .
 
 docker-up:
-	docker run -d --name kwami-ai-api -p 8080:8080 --env-file .env kwami-ai-api
+	docker run -d --name kwami-lk-api -p 8080:8080 --env-file .env kwami-lk-api
 
 docker-down:
-	docker stop kwami-ai-api && docker rm kwami-ai-api
+	docker stop kwami-lk-api && docker rm kwami-lk-api
 
 # =============================================================================
 # Cleanup

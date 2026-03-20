@@ -1,10 +1,10 @@
-# fly.toml app configuration file generated for kwami-ai-api on 2026-02-24T21:05:48+01:00
+# fly.toml app configuration file generated for kwami-lk-api on 2026-02-24T21:05:48+01:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 # To run a single machine: fly scale count 1
 
-app = 'kwami-ai-api'
+app = 'kwami-lk-api'
 primary_region = 'lhr'
 
 [build]
