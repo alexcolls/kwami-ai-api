@@ -86,9 +86,14 @@ async def generate_token(
     except HTTPException:
         raise
     except Exception as e:
-        # If credit check fails (e.g. DB unavailable), allow connection
-        # to avoid blocking users due to infrastructure issues
-        logger.error(f"Credit check failed, allowing connection: {e}")
+        if settings.credits_fail_open_on_check_error:
+            logger.error(f"Credit check failed, allowing connection: {e}")
+        else:
+            logger.error(f"Credit check failed, blocking connection: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Credit verification is temporarily unavailable. Please try again shortly.",
+            ) from e
 
     try:
         token = create_token(
