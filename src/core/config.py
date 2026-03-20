@@ -13,6 +13,14 @@ def _default_port() -> int:
     return int(os.environ.get("PORT") or os.environ.get("API_PORT") or "8080")
 
 
+def _default_credits_fail_open() -> bool:
+    """Fail open outside production unless explicitly configured."""
+    value = os.environ.get("CREDITS_FAIL_OPEN_ON_CHECK_ERROR")
+    if value is not None:
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("APP_ENV", "development") != "production"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -67,6 +75,72 @@ class Settings(BaseSettings):
 
     # Kwami API key (shared secret between agent and API for usage reporting)
     kwami_api_key: str | None = Field(default=None, alias="KWAMI_API_KEY")
+
+    # Credits / billing safety
+    credits_fail_open_on_check_error: bool = Field(
+        default_factory=_default_credits_fail_open,
+        alias="CREDITS_FAIL_OPEN_ON_CHECK_ERROR",
+    )
+
+    # Billing policy
+    billing_pricing_version: str = Field(
+        default="2026-03-20",
+        alias="BILLING_PRICING_VERSION",
+    )
+    billing_markup_multiplier: float = Field(
+        default=2.0,
+        alias="BILLING_MARKUP_MULTIPLIER",
+    )
+    billing_fixed_fee_usd: float = Field(
+        default=0.0,
+        alias="BILLING_FIXED_FEE_USD",
+    )
+    billing_fallback_cost_per_1m_tokens_usd: float = Field(
+        default=2.0,
+        alias="BILLING_FALLBACK_COST_PER_1M_TOKENS_USD",
+    )
+
+    # External service costs are plan-dependent, so keep them configurable.
+    billing_tavily_search_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_TAVILY_SEARCH_PER_CALL_USD",
+    )
+    billing_tavily_extract_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_TAVILY_EXTRACT_PER_CALL_USD",
+    )
+    billing_serpapi_search_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_SERPAPI_SEARCH_PER_CALL_USD",
+    )
+    billing_microlink_fetch_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_MICROLINK_FETCH_PER_CALL_USD",
+    )
+    billing_zep_add_messages_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_ADD_MESSAGES_PER_CALL_USD",
+    )
+    billing_zep_get_context_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_GET_CONTEXT_PER_CALL_USD",
+    )
+    billing_zep_search_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_SEARCH_PER_CALL_USD",
+    )
+    billing_zep_get_user_name_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_GET_USER_NAME_PER_CALL_USD",
+    )
+    billing_zep_create_user_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_CREATE_USER_PER_CALL_USD",
+    )
+    billing_zep_create_thread_per_call_usd: float = Field(
+        default=0.0,
+        alias="BILLING_ZEP_CREATE_THREAD_PER_CALL_USD",
+    )
 
     # Enable OpenAPI docs (/docs, /redoc) in production when set to true
     enable_docs: bool = Field(default=False, alias="ENABLE_DOCS")
