@@ -1,6 +1,7 @@
 """Security and authentication logic."""
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 import jwt
@@ -35,6 +36,15 @@ class AuthUser:
 
     def __repr__(self) -> str:
         return f"AuthUser(id={self.id}, email={self.email})"
+
+
+@dataclass(slots=True)
+class AdminPrincipal:
+    """Authenticated admin identity for internal endpoints."""
+
+    auth_method: str
+    user_id: str | None = None
+    email: str | None = None
 
 
 async def verify_token(token: str) -> dict:
@@ -90,3 +100,21 @@ def check_user_access(user: AuthUser, user_id: str) -> bool:
         return True
     clean_user_id = user_id.replace("kwami_", "")
     return user.id == clean_user_id
+
+
+def is_admin_user(user: AuthUser | None) -> bool:
+    """Check whether the authenticated user is allowed to act as an admin."""
+    if not user:
+        return False
+    if user.role == "service_role":
+        return True
+    if user.email and user.email.lower() in settings.admin_emails:
+        return True
+    return False
+
+
+def is_valid_admin_api_key(api_key: str | None) -> bool:
+    """Validate the env-configured admin API key."""
+    if not api_key or not settings.admin_api_key:
+        return False
+    return api_key == settings.admin_api_key

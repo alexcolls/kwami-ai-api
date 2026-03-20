@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # Kwami API key (shared secret between agent and API for usage reporting)
     kwami_api_key: str | None = Field(default=None, alias="KWAMI_API_KEY")
 
+    # Admin access for reconciliation and other internal operations
+    admin_api_key: str | None = Field(default=None, alias="ADMIN_API_KEY")
+    admin_emails_str: str = Field(default="", alias="ADMIN_EMAILS")
+
     # Credits / billing safety
     credits_fail_open_on_check_error: bool = Field(
         default_factory=_default_credits_fail_open,
@@ -142,6 +146,44 @@ class Settings(BaseSettings):
         alias="BILLING_ZEP_CREATE_THREAD_PER_CALL_USD",
     )
 
+    # Provider reconciliation credentials and pricing inputs
+    openai_admin_key: str | None = Field(default=None, alias="OPENAI_ADMIN_KEY")
+    openai_api_base: str = Field(
+        default="https://api.openai.com/v1",
+        alias="OPENAI_API_BASE",
+    )
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
+    tavily_project_id: str | None = Field(default=None, alias="TAVILY_PROJECT_ID")
+    reconciliation_tavily_cost_per_credit_usd: float = Field(
+        default=0.008,
+        alias="RECONCILIATION_TAVILY_COST_PER_CREDIT_USD",
+    )
+    livekit_cloud_project_id: str | None = Field(
+        default=None,
+        alias="LIVEKIT_CLOUD_PROJECT_ID",
+    )
+    livekit_cloud_api_base: str = Field(
+        default="https://cloud-api.livekit.io/api",
+        alias="LIVEKIT_CLOUD_API_BASE",
+    )
+    livekit_analytics_token: str | None = Field(
+        default=None,
+        alias="LIVEKIT_ANALYTICS_TOKEN",
+    )
+    reconciliation_livekit_connection_minute_usd: float = Field(
+        default=0.0,
+        alias="RECONCILIATION_LIVEKIT_CONNECTION_MINUTE_USD",
+    )
+    reconciliation_livekit_bandwidth_gb_usd: float = Field(
+        default=0.0,
+        alias="RECONCILIATION_LIVEKIT_BANDWIDTH_GB_USD",
+    )
+    zep_api_base: str = Field(
+        default="https://api.getzep.com/api/v2",
+        alias="ZEP_API_BASE",
+    )
+    zep_usage_api_url: str | None = Field(default=None, alias="ZEP_USAGE_API_URL")
+
     # Enable OpenAPI docs (/docs, /redoc) in production when set to true
     enable_docs: bool = Field(default=False, alias="ENABLE_DOCS")
 
@@ -158,6 +200,16 @@ class Settings(BaseSettings):
     def auth_enabled(self) -> bool:
         """Check if authentication is configured."""
         return self.supabase_url is not None
+
+    @computed_field
+    @property
+    def admin_emails(self) -> list[str]:
+        """Parse admin emails from a comma-separated string."""
+        return [
+            email.strip().lower()
+            for email in self.admin_emails_str.split(",")
+            if email.strip()
+        ]
     
     @computed_field
     @property
