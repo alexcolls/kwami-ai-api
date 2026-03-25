@@ -60,6 +60,40 @@ class Settings(BaseSettings):
     livekit_url: str = Field(alias="LIVEKIT_URL")
     livekit_api_key: str = Field(alias="LIVEKIT_API_KEY")
     livekit_api_secret: str = Field(alias="LIVEKIT_API_SECRET")
+    livekit_sip_outbound_trunk_id: str | None = Field(
+        default=None,
+        alias="LIVEKIT_SIP_OUTBOUND_TRUNK_ID",
+    )
+    livekit_sip_inbound_uri: str | None = Field(
+        default=None,
+        alias="LIVEKIT_SIP_INBOUND_URI",
+    )
+    livekit_sip_dial_transport: str = Field(
+        default="tcp",
+        alias="LIVEKIT_SIP_DIAL_TRANSPORT",
+    )
+    livekit_sip_participant_attribute_key: str = Field(
+        default="kwami_id",
+        alias="LIVEKIT_SIP_PARTICIPANT_ATTRIBUTE_KEY",
+    )
+
+    # Public URLs / webhooks
+    app_public_url: str | None = Field(default=None, alias="APP_PUBLIC_URL")
+
+    # Twilio / telephony
+    twilio_account_sid: str | None = Field(default=None, alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str | None = Field(default=None, alias="TWILIO_AUTH_TOKEN")
+    twilio_phone_country: str = Field(default="US", alias="TWILIO_PHONE_COUNTRY")
+    twilio_whatsapp_from: str | None = Field(default=None, alias="TWILIO_WHATSAPP_FROM")
+    twilio_sip_trunk_sid: str | None = Field(default=None, alias="TWILIO_SIP_TRUNK_SID")
+    twilio_voice_status_callback_url: str | None = Field(
+        default=None,
+        alias="TWILIO_VOICE_STATUS_CALLBACK_URL",
+    )
+    twilio_messaging_status_callback_url: str | None = Field(
+        default=None,
+        alias="TWILIO_MESSAGING_STATUS_CALLBACK_URL",
+    )
 
     # Memory
     zep_api_key: str | None = Field(default=None, alias="ZEP_API_KEY")
@@ -195,11 +229,19 @@ class Settings(BaseSettings):
     def show_docs(self) -> bool:
         """Whether to expose /docs and /redoc."""
         return not self.is_production or self.enable_docs
-    
+
     @property
     def auth_enabled(self) -> bool:
         """Check if authentication is configured."""
         return self.supabase_url is not None
+
+    @property
+    def twilio_enabled(self) -> bool:
+        return bool(self.twilio_account_sid and self.twilio_auth_token)
+
+    @property
+    def telephony_enabled(self) -> bool:
+        return self.twilio_enabled and bool(self.livekit_sip_outbound_trunk_id)
 
     @computed_field
     @property
