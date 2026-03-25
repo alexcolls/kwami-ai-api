@@ -113,3 +113,14 @@ async def require_admin(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=detail,
     )
+
+
+async def require_internal_api_key(
+    x_kwami_api_key: Annotated[Optional[str], Header(alias="X-Kwami-API-Key")] = None,
+) -> None:
+    """Require the shared agent/API key for internal backend-to-backend routes."""
+    if not settings.kwami_api_key or x_kwami_api_key != settings.kwami_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Valid internal API key required",
+        )
