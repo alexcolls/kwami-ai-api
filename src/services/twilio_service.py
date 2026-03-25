@@ -23,14 +23,17 @@ def get_twilio_client() -> Client:
     global _twilio_client
     if _twilio_client is None:
         if not settings.twilio_enabled:
-            raise RuntimeError("Twilio is not configured")
+            raise RuntimeError("Platform phone provisioning is not configured")
         _twilio_client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
     return _twilio_client
 
 
 def ensure_twilio_enabled() -> None:
     if not settings.twilio_enabled:
-        raise HTTPException(status_code=503, detail="Twilio is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Platform phone provisioning is not configured on the server",
+        )
 
 
 def webhook_url(path: str, explicit: str | None = None) -> str | None:
@@ -119,7 +122,7 @@ def purchase_phone_number(
 
 
 def attach_phone_number_to_sip_trunk(phone_number_sid: str) -> str | None:
-    """Attach a number to the configured Twilio SIP trunk when outbound calling is enabled."""
+    """Attach a purchased number to the shared Twilio SIP trunk."""
     if not settings.twilio_sip_trunk_sid:
         return None
 

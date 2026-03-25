@@ -64,6 +64,10 @@ class Settings(BaseSettings):
         default=None,
         alias="LIVEKIT_SIP_OUTBOUND_TRUNK_ID",
     )
+    livekit_sip_inbound_trunk_id: str | None = Field(
+        default=None,
+        alias="LIVEKIT_SIP_INBOUND_TRUNK_ID",
+    )
     livekit_sip_inbound_uri: str | None = Field(
         default=None,
         alias="LIVEKIT_SIP_INBOUND_URI",

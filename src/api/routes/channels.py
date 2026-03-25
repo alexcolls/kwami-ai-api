@@ -26,7 +26,7 @@ from src.services.channels import (
     update_channel,
     upsert_channel,
 )
-from src.services.telephony import create_outbound_call
+from src.services.telephony import create_outbound_call, sync_shared_livekit_trunks
 from src.services.twilio_service import (
     attach_phone_number_to_sip_trunk,
     extract_twilio_error,
@@ -122,11 +122,27 @@ async def purchase_kwami_phone_number(
     )
 
     trunk_phone_sid = None
+    shared_infra_sync: dict[str, Any] | None = None
+    voice_status = "active"
+    voice_outbound_ready = bool(settings.livekit_sip_outbound_trunk_id)
     if purchase.get("sid"):
         try:
             trunk_phone_sid = attach_phone_number_to_sip_trunk(str(purchase["sid"]))
         except Exception as exc:  # pragma: no cover - provider failure
             logger.warning("Failed to attach number to Twilio SIP trunk: %s", exc)
+        try:
+            shared_infra_sync = await sync_shared_livekit_trunks(phone_number)
+            outbound_state = shared_infra_sync.get("outbound") if isinstance(shared_infra_sync, dict) else {}
+            voice_outbound_ready = bool(
+                isinstance(outbound_state, dict) and outbound_state.get("synced")
+            )
+            if not voice_outbound_ready and settings.livekit_sip_outbound_trunk_id:
+                voice_status = "routing_pending"
+        except Exception as exc:  # pragma: no cover - provider failure
+            voice_status = "routing_pending"
+            voice_outbound_ready = False
+            shared_infra_sync = {"error": str(exc), "strategy": "shared_trunks"}
+            logger.warning("Failed to sync purchased number to shared LiveKit trunks: %s", exc)
 
     voice_channel = upsert_channel(
         user_id=user.id,
@@ -135,9 +151,12 @@ async def purchase_kwami_phone_number(
         phone_number=phone_number,
         display_name=request.display_name or kwami.get("name"),
         country_code=request.country_code,
-        status="active",
-        capabilities={"voice": True, "outbound": bool(settings.livekit_sip_outbound_trunk_id)},
-        metadata={"twilioSipTrunkPhoneSid": trunk_phone_sid},
+        status=voice_status,
+        capabilities={"voice": True, "outbound": voice_outbound_ready},
+        metadata={
+            "twilioSipTrunkPhoneSid": trunk_phone_sid,
+            "sharedInfrastructure": shared_infra_sync,
+        },
         provider_channel_sid=str(purchase.get("sid") or ""),
         livekit_outbound_trunk_id=settings.livekit_sip_outbound_trunk_id,
     )
@@ -150,12 +169,22 @@ async def purchase_kwami_phone_number(
         country_code=request.country_code,
         status="pending_setup",
         capabilities={"whatsapp": True, "requiresApproval": True},
-        metadata={"note": "Enable this sender in Twilio/Meta before using production WhatsApp."},
+        metadata={
+            "note": "Enable this sender in Twilio/Meta before using production WhatsApp.",
+            "sharedInfrastructure": {
+                "phoneProvisionedByPlatform": True,
+                "routingStrategy": "provider_webhooks",
+            },
+        },
         provider_channel_sid=str(purchase.get("sid") or ""),
         provider_sender=f"whatsapp:{phone_number}",
         livekit_outbound_trunk_id=settings.livekit_sip_outbound_trunk_id,
     )
-    return {"voiceChannel": voice_channel, "whatsappChannel": whatsapp_channel}
+    return {
+        "voiceChannel": voice_channel,
+        "whatsappChannel": whatsapp_channel,
+        "sharedInfrastructure": shared_infra_sync,
+    }
 
 
 @router.post("/whatsapp/configure")
