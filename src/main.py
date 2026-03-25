@@ -10,13 +10,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routes import (
     admin_reconciliation,
+    channels,
     credits,
     health,
+    internal,
     languages,
     memory,
     models,
     token,
     voices,
+    webhooks,
 )
 from src.core.config import settings
 
@@ -85,6 +88,9 @@ app.include_router(models.router, prefix="/models", tags=["Models"])
 app.include_router(voices.router, prefix="/voices", tags=["Voices"])
 app.include_router(languages.router, prefix="/languages", tags=["Languages"])
 app.include_router(credits.router, prefix="/credits", tags=["Credits"])
+app.include_router(channels.router, prefix="/channels", tags=["Channels"])
+app.include_router(internal.router, prefix="/internal", tags=["Internal"])
+app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(
     admin_reconciliation.router,
     prefix="/admin/reconciliation",

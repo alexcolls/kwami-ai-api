@@ -1,6 +1,18 @@
 """API routes."""
 
-from . import admin_reconciliation, credits, health, languages, memory, models, token, voices
+from . import (
+    admin_reconciliation,
+    channels,
+    credits,
+    health,
+    internal,
+    languages,
+    memory,
+    models,
+    token,
+    voices,
+    webhooks,
+)
 
 __all__ = [
     "health",
@@ -11,4 +23,7 @@ __all__ = [
     "languages",
     "credits",
     "admin_reconciliation",
+    "channels",
+    "internal",
+    "webhooks",
 ]
