@@ -31,6 +31,9 @@ dependencies = [
     # Credits & payments
     "stripe>=8.0.0",
     "supabase>=2.0.0",
+    "twilio>=9.8.0",
+    "phonenumbers>=8.13.55",
+    "python-multipart>=0.0.20",
     # Graph analysis for memory operations
     "networkx>=3.2.0",
     "python-louvain>=0.16",

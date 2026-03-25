@@ -4,7 +4,7 @@
 #
 # To run a single machine: fly scale count 1
 
-app = 'kwami-lk-api'
+app = 'kwami-ai-api'
 primary_region = 'lhr'
 
 [build]
@@ -27,6 +27,13 @@ primary_region = 'lhr'
     type = 'requests'
     hard_limit = 25
     soft_limit = 20
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
 
 [[vm]]
   memory = '512mb'

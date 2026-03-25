@@ -8,8 +8,11 @@ venv
 # Git and IDE
 .git
 .gitignore
+.gitattributes
 .cursor
 *.md
+.vscode
+.idea
 
 # Tests and dev
 tests
@@ -17,10 +20,13 @@ tests
 .coverage
 htmlcov
 *.egg-info
+.pytest_cache
+.tox
 
 # Deploy config (not needed in image)
 fly.toml
 .dockerignore
+.github
 
 # Misc
 __pycache__
@@ -28,3 +34,7 @@ __pycache__
 *.pyo
 .ruff_cache
 .mypy_cache
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
