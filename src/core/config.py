@@ -80,6 +80,10 @@ class Settings(BaseSettings):
         default="kwami_id",
         alias="LIVEKIT_SIP_PARTICIPANT_ATTRIBUTE_KEY",
     )
+    livekit_agent_name: str = Field(
+        default="kwami-agent",
+        alias="LIVEKIT_AGENT_NAME",
+    )
 
     # Public URLs / webhooks
     app_public_url: str | None = Field(default=None, alias="APP_PUBLIC_URL")

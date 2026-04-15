@@ -15,22 +15,31 @@ from src.services.channels import (
     build_agent_bootstrap_payload,
     create_call_event,
     create_message_event,
+    delete_kwami_channels,
     ensure_contact,
     ensure_conversation,
     get_channel,
     get_channel_by_kind,
     get_owned_kwami,
     list_channels_for_kwami,
+    list_channels_sharing_twilio_incoming,
     normalize_phone_number,
     recent_events_for_kwami,
     update_channel,
     upsert_channel,
 )
-from src.services.telephony import create_outbound_call, sync_shared_livekit_trunks
+from src.services.telephony import (
+    create_outbound_call,
+    remove_phone_from_shared_livekit_trunks,
+    sync_shared_livekit_trunks,
+)
 from src.services.twilio_service import (
     attach_phone_number_to_sip_trunk,
+    detach_phone_number_from_sip_trunk,
     extract_twilio_error,
+    place_direct_pstn_test_call,
     purchase_phone_number,
+    release_incoming_phone_number,
     search_available_numbers,
     send_whatsapp_message,
 )
@@ -48,6 +57,16 @@ class PhonePurchaseRequest(BaseModel):
     phone_number: str = Field(alias="phoneNumber")
     display_name: str | None = Field(default=None, alias="displayName")
     country_code: str = Field(default="US", alias="countryCode")
+
+
+class PhoneReleaseRequest(BaseModel):
+    kwami_id: str = Field(alias="kwamiId")
+    channel_id: str = Field(alias="channelId")
+    release_provider_resources: bool = Field(
+        default=True,
+        alias="releaseProviderResources",
+        description="If true, remove from LiveKit trunks, Twilio SIP trunk, and release the Twilio number.",
+    )
 
 
 class ChannelUpdateRequest(BaseModel):
@@ -187,6 +206,78 @@ async def purchase_kwami_phone_number(
     }
 
 
+@router.post("/phone/release")
+async def release_kwami_phone_number(
+    request: PhoneReleaseRequest,
+    user: Annotated[AuthUser, Depends(require_auth)],
+):
+    """Drop voice + WhatsApp channel rows and optionally release the Twilio number and shared trunk state."""
+    try:
+        get_owned_kwami(user.id, request.kwami_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        anchor = get_channel(user.id, request.channel_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Channel not found") from exc
+
+    if anchor["kwami_id"] != request.kwami_id:
+        raise HTTPException(status_code=400, detail="Channel does not belong to this kwami")
+
+    incoming_sid = (anchor.get("provider_channel_sid") or "").strip()
+    rows = (
+        list_channels_sharing_twilio_incoming(user.id, request.kwami_id, incoming_sid)
+        if incoming_sid
+        else [anchor]
+    )
+    phone_e164 = anchor["phone_number"]
+    channel_ids = [str(r["id"]) for r in rows]
+
+    trunk_attach_sid: str | None = None
+    for row in rows:
+        if row.get("kind") == "voice_phone":
+            meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            raw = meta.get("twilioSipTrunkPhoneSid") if meta else None
+            if isinstance(raw, str) and raw.strip():
+                trunk_attach_sid = raw.strip()
+            break
+
+    provider_steps: dict[str, Any] = {"livekit": None, "twilioTrunk": None, "twilioIncoming": None}
+
+    if request.release_provider_resources and phone_e164:
+        try:
+            provider_steps["livekit"] = await remove_phone_from_shared_livekit_trunks(phone_e164)
+        except Exception as exc:
+            logger.warning("LiveKit trunk cleanup failed (continuing): %s", exc)
+            provider_steps["livekit"] = {"error": str(exc)}
+
+        if incoming_sid:
+            try:
+                detach_phone_number_from_sip_trunk(trunk_attach_sid or "")
+                provider_steps["twilioTrunk"] = "detached" if trunk_attach_sid else "skipped"
+            except Exception as exc:
+                logger.warning("Twilio SIP trunk detach failed (continuing): %s", exc)
+                provider_steps["twilioTrunk"] = {"error": str(exc)}
+
+            try:
+                release_incoming_phone_number(incoming_sid)
+                provider_steps["twilioIncoming"] = "released"
+            except Exception as exc:
+                err_t = extract_twilio_error(exc)
+                logger.warning("Twilio incoming release failed: %s", exc)
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Could not release phone number in Twilio: {err_t[1] or exc}",
+                ) from exc
+
+    delete_kwami_channels(user.id, channel_ids)
+    return {
+        "ok": True,
+        "removedChannelIds": channel_ids,
+        "provider": provider_steps,
+    }
+
+
 @router.post("/whatsapp/configure")
 async def configure_whatsapp_channel(
     request: ChannelUpdateRequest,
@@ -213,7 +304,10 @@ async def start_outbound_call(
     user: Annotated[AuthUser, Depends(require_auth)],
 ):
     kwami = get_owned_kwami(user.id, request.kwami_id)
-    to_number = normalize_phone_number(request.to_number, settings.twilio_phone_country)
+    try:
+        to_number = normalize_phone_number(request.to_number, settings.twilio_phone_country)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     channel = (
         get_channel(user.id, request.channel_id)
         if request.channel_id
@@ -256,8 +350,13 @@ async def start_outbound_call(
             from_number=channel["phone_number"],
             to_number=to_number,
             status="queued",
-            provider_payload={"waitUntilAnswered": request.wait_until_answered},
+            provider_payload={
+                "waitUntilAnswered": request.wait_until_answered,
+                "agentDispatchId": outbound.get("agent_dispatch_id"),
+            },
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         error_code, error_message = extract_twilio_error(exc)
         create_call_event(
@@ -277,6 +376,89 @@ async def start_outbound_call(
             provider_payload={"error": str(exc)},
         )
         raise
+
+    return {"call": event, "conversationId": conversation["id"]}
+
+
+@router.post("/calls/twilio-direct")
+async def start_twilio_direct_test_call(
+    request: OutboundCallRequest,
+    user: Annotated[AuthUser, Depends(require_auth)],
+):
+    """Place an outbound call using Twilio Voice REST only (no LiveKit room or agent)."""
+    get_owned_kwami(user.id, request.kwami_id)
+    try:
+        to_number = normalize_phone_number(request.to_number, settings.twilio_phone_country)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    channel = (
+        get_channel(user.id, request.channel_id)
+        if request.channel_id
+        else get_channel_by_kind(user.id, request.kwami_id, "voice_phone")
+    )
+    if not channel:
+        raise HTTPException(status_code=404, detail="No phone channel configured for this kwami")
+
+    contact = ensure_contact(
+        user_id=user.id,
+        kwami_id=request.kwami_id,
+        phone_number=to_number,
+    )
+    conversation = ensure_conversation(
+        user_id=user.id,
+        kwami_id=request.kwami_id,
+        channel_id=channel["id"],
+        kind="call",
+        contact_id=contact["id"],
+        metadata={"channelKind": "voice_phone"},
+    )
+
+    try:
+        twilio_result = place_direct_pstn_test_call(
+            to_e164=to_number,
+            from_e164=channel["phone_number"],
+        )
+        event = create_call_event(
+            conversation_id=conversation["id"],
+            channel_id=channel["id"],
+            user_id=user.id,
+            kwami_id=request.kwami_id,
+            direction="outbound",
+            provider_call_sid=twilio_result.get("sid"),
+            livekit_room_name=None,
+            participant_identity=None,
+            from_number=channel["phone_number"],
+            to_number=to_number,
+            status="queued",
+            provider_payload={
+                "mode": "twilio_direct",
+                "twilioStatus": twilio_result.get("status"),
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        error_code, error_message = extract_twilio_error(exc)
+        create_call_event(
+            conversation_id=conversation["id"],
+            channel_id=channel["id"],
+            user_id=user.id,
+            kwami_id=request.kwami_id,
+            direction="outbound",
+            provider_call_sid=None,
+            livekit_room_name=None,
+            participant_identity=None,
+            from_number=channel["phone_number"],
+            to_number=to_number,
+            status="failed",
+            error_code=error_code,
+            error_message=error_message,
+            provider_payload={"mode": "twilio_direct", "error": str(exc)},
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=error_message or str(exc),
+        ) from exc
 
     return {"call": event, "conversationId": conversation["id"]}
 

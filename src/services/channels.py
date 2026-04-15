@@ -67,6 +67,31 @@ def list_channels_for_kwami(user_id: str, kwami_id: str) -> list[dict[str, Any]]
     return list(getattr(result, "data", None) or [])
 
 
+def list_channels_sharing_twilio_incoming(
+    user_id: str,
+    kwami_id: str,
+    twilio_incoming_sid: str,
+) -> list[dict[str, Any]]:
+    """Voice + WhatsApp rows for the same Twilio IncomingPhoneNumber SID."""
+    sb = get_supabase_admin()
+    result = (
+        sb.table("kwami_channels")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("kwami_id", kwami_id)
+        .eq("provider_channel_sid", twilio_incoming_sid)
+        .execute()
+    )
+    return list(getattr(result, "data", None) or [])
+
+
+def delete_kwami_channels(user_id: str, channel_ids: list[str]) -> None:
+    if not channel_ids:
+        return
+    sb = get_supabase_admin()
+    sb.table("kwami_channels").delete().eq("user_id", user_id).in_("id", channel_ids).execute()
+
+
 def get_channel(user_id: str, channel_id: str) -> dict[str, Any]:
     sb = get_supabase_admin()
     result = (
