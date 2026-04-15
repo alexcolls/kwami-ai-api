@@ -1,6 +1,7 @@
 """Credits ledger and settlement logic."""
 
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -319,6 +320,34 @@ async def deduct_credits(
         if "Insufficient credits" in str(e):
             raise ValueError("Insufficient credits") from e
         raise
+
+
+def resolve_ledger_user_id(reported_id: str) -> str:
+    """Map agent-reported id to Supabase `users.id` for `credit_usage_logs`.
+
+    The agent often sends `kwami_id` (from telephony metadata) instead of the auth user id.
+    """
+    rid = str(reported_id).strip()
+    if not rid:
+        raise ValueError("user_id is required")
+
+    try:
+        uuid.UUID(rid)
+    except ValueError:
+        return rid
+
+    sb = get_supabase_admin()
+    kwami_hit = (
+        sb.table("user_kwamis")
+        .select("user_id")
+        .eq("id", rid)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(kwami_hit, "data", None) or []
+    if rows and rows[0].get("user_id"):
+        return str(rows[0]["user_id"])
+    return rid
 
 
 async def log_usage(
@@ -659,6 +688,14 @@ async def process_usage_report(
 
     Returns summary with total_credits_charged and new_balance.
     """
+    ledger_user_id = resolve_ledger_user_id(user_id)
+    if ledger_user_id != user_id:
+        logger.info(
+            "Usage report user id mapped kwami or alias -> ledger user: %s -> %s",
+            user_id,
+            ledger_user_id,
+        )
+
     total_requested_micro_credits = 0
     total_charged_micro_credits = 0
     total_provider_cost_usd = 0.0
@@ -672,7 +709,7 @@ async def process_usage_report(
 
         breakdown = calculate_usage_charge(item)
         usage_log_id = await log_usage(
-            user_id=user_id,
+            user_id=ledger_user_id,
             session_id=session_id,
             model_type=model_type,
             model_id=model_id,
@@ -709,7 +746,7 @@ async def process_usage_report(
     if total_requested_micro_credits > 0:
         try:
             new_balance = await deduct_credits(
-                user_id=user_id,
+                user_id=ledger_user_id,
                 amount_micro=total_requested_micro_credits,
                 description=f"Session usage: {session_id}",
                 metadata={
@@ -722,7 +759,7 @@ async def process_usage_report(
         except ValueError:
             settlement_status = "insufficient_credits"
             logger.warning(
-                f"Insufficient credits for user {user_id}, "
+                f"Insufficient credits for user {ledger_user_id}, "
                 f"session {session_id}. Usage logged but not fully charged."
             )
 
