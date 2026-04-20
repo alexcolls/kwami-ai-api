@@ -12,6 +12,7 @@ from src.api.routes import (
     admin_reconciliation,
     channels,
     credits,
+    email,
     health,
     internal,
     languages,
@@ -89,6 +90,7 @@ app.include_router(voices.router, prefix="/voices", tags=["Voices"])
 app.include_router(languages.router, prefix="/languages", tags=["Languages"])
 app.include_router(credits.router, prefix="/credits", tags=["Credits"])
 app.include_router(channels.router, prefix="/channels", tags=["Channels"])
+app.include_router(email.router, prefix="/email", tags=["Email"])
 app.include_router(internal.router, prefix="/internal", tags=["Internal"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(

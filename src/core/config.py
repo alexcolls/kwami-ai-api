@@ -103,6 +103,14 @@ class Settings(BaseSettings):
         alias="TWILIO_MESSAGING_STATUS_CALLBACK_URL",
     )
 
+    # SendGrid / email
+    sendgrid_api_key: str | None = Field(default=None, alias="SENDGRID_API_KEY")
+    sendgrid_inbound_webhook_secret: str | None = Field(
+        default=None,
+        alias="SENDGRID_INBOUND_WEBHOOK_SECRET",
+    )
+    email_domain: str = Field(default="kwami.io", alias="EMAIL_DOMAIN")
+
     # Memory
     zep_api_key: str | None = Field(default=None, alias="ZEP_API_KEY")
 
@@ -250,6 +258,10 @@ class Settings(BaseSettings):
     @property
     def telephony_enabled(self) -> bool:
         return self.twilio_enabled and bool(self.livekit_sip_outbound_trunk_id)
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.sendgrid_api_key)
 
     @computed_field
     @property

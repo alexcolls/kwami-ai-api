@@ -1,7 +1,8 @@
-"""Twilio voice and WhatsApp webhooks."""
+"""Twilio voice/WhatsApp and SendGrid email webhooks."""
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -19,6 +20,8 @@ from src.services.channels import (
     update_call_event_status,
     update_message_event_status,
 )
+from src.services.email_service import process_inbound_email
+from src.services.sendgrid_service import verify_inbound_webhook
 from src.services.twilio_service import (
     build_message_ack_response,
     build_voice_bridge_response,
@@ -186,4 +189,70 @@ async def twilio_whatsapp_status_webhook(request: Request):
             error_message=payload.get("ErrorMessage"),
             provider_payload=payload,
         )
+    return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# SendGrid Inbound Parse
+# ---------------------------------------------------------------------------
+
+def _parse_address_list(raw: str) -> list[str]:
+    """Extract email addresses from a SendGrid-style address string."""
+    if not raw:
+        return []
+    return [a.strip().strip("<>") for a in raw.split(",") if "@" in a]
+
+
+@router.post("/email/inbound")
+async def sendgrid_inbound_email(request: Request):
+    """Receive an email via SendGrid Inbound Parse (multipart/form-data)."""
+    form = await request.form()
+
+    # Optional webhook signature verification
+    token = str(form.get("token", ""))
+    timestamp = str(form.get("timestamp", ""))
+    signature = str(form.get("signature", ""))
+    if not verify_inbound_webhook(token, timestamp, signature):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    from_address = str(form.get("from", ""))
+    to_raw = str(form.get("to", ""))
+    cc_raw = str(form.get("cc", ""))
+    subject = str(form.get("subject", ""))
+    body_text = str(form.get("text", ""))
+    body_html = str(form.get("html", ""))
+
+    # SendGrid may include an envelope JSON with clean addresses
+    envelope_raw = str(form.get("envelope", "{}"))
+    try:
+        envelope = json.loads(envelope_raw)
+    except (json.JSONDecodeError, TypeError):
+        envelope = {}
+
+    to_addresses = envelope.get("to") or _parse_address_list(to_raw)
+    if isinstance(to_addresses, str):
+        to_addresses = [to_addresses]
+
+    headers_raw = str(form.get("headers", ""))
+    headers_dict: dict[str, str] = {}
+    for line in headers_raw.split("\n"):
+        if ":" in line:
+            key, _, val = line.partition(":")
+            headers_dict[key.strip()] = val.strip()
+
+    sendgrid_message_id = headers_dict.get("Message-ID") or headers_dict.get("Message-Id")
+
+    stored = process_inbound_email(
+        from_address=from_address,
+        to_addresses=to_addresses,
+        cc_addresses=_parse_address_list(cc_raw) or None,
+        subject=subject,
+        body_text=body_text,
+        body_html=body_html,
+        headers=headers_dict,
+        sendgrid_message_id=sendgrid_message_id,
+    )
+
+    if not stored:
+        logger.warning("Inbound email dropped — no matching account")
     return JSONResponse({"ok": True})

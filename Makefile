@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint format clean docker-build docker-up docker-down
+.PHONY: help install dev test lint format clean docker-build docker-up docker-down deploy
 
 help:
 	@echo "Kwami AI API - Development Commands"
@@ -16,6 +16,9 @@ help:
 	@echo "  make docker-build  - Build Docker image"
 	@echo "  make docker-up     - Start container"
 	@echo "  make docker-down   - Stop container"
+	@echo ""
+	@echo "Deploy:"
+	@echo "  make deploy        - Deploy to Fly.io (fly deploy)"
 
 # =============================================================================
 # Development
@@ -52,6 +55,13 @@ docker-up:
 
 docker-down:
 	docker stop kwami-lk-api && docker rm kwami-lk-api
+
+# =============================================================================
+# Deploy
+# =============================================================================
+
+deploy:
+	fly deploy
 
 # =============================================================================
 # Cleanup
