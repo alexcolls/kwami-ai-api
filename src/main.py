@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.routes import (
     admin_reconciliation,
+    calendar,
     channels,
     credits,
     email,
@@ -91,6 +92,7 @@ app.include_router(languages.router, prefix="/languages", tags=["Languages"])
 app.include_router(credits.router, prefix="/credits", tags=["Credits"])
 app.include_router(channels.router, prefix="/channels", tags=["Channels"])
 app.include_router(email.router, prefix="/email", tags=["Email"])
+app.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
 app.include_router(internal.router, prefix="/internal", tags=["Internal"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(
