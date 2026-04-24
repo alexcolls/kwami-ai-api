@@ -275,6 +275,101 @@ def ensure_contact(
     return row
 
 
+def list_contacts_for_kwami(
+    user_id: str,
+    kwami_id: str,
+    *,
+    query: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    sb = get_supabase_admin()
+    select_query = (
+        sb.table("kwami_contacts")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("kwami_id", kwami_id)
+    )
+    if query and query.strip():
+        like = f"%{query.strip()}%"
+        select_query = select_query.or_(
+            f"display_name.ilike.{like},phone_number.ilike.{like},email.ilike.{like},instagram.ilike.{like},tiktok.ilike.{like}"
+        )
+    result = select_query.order("updated_at", desc=True).limit(limit).execute()
+    return list(getattr(result, "data", None) or [])
+
+
+def get_contact(user_id: str, contact_id: str) -> dict[str, Any]:
+    sb = get_supabase_admin()
+    result = (
+        sb.table("kwami_contacts")
+        .select("*")
+        .eq("id", contact_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    row = _single(result)
+    if not row:
+        raise ValueError("Contact not found")
+    return row
+
+
+def create_contact(
+    *,
+    user_id: str,
+    kwami_id: str,
+    display_name: str,
+    phone_number: str,
+    whatsapp_address: str | None = None,
+    email: str | None = None,
+    instagram: str | None = None,
+    tiktok: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    sb = get_supabase_admin()
+    payload = {
+        "user_id": user_id,
+        "kwami_id": kwami_id,
+        "display_name": display_name,
+        "phone_number": phone_number,
+        "whatsapp_address": whatsapp_address,
+        "email": email,
+        "instagram": instagram,
+        "tiktok": tiktok,
+        "metadata": metadata or {},
+    }
+    created = sb.table("kwami_contacts").insert(payload).execute()
+    row = _single(created)
+    if not row:
+        raise RuntimeError("Failed to create contact")
+    return row
+
+
+def update_contact(
+    *,
+    user_id: str,
+    contact_id: str,
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    sb = get_supabase_admin()
+    result = (
+        sb.table("kwami_contacts")
+        .update(updates)
+        .eq("id", contact_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    row = _single(result)
+    if not row:
+        raise ValueError("Contact not found")
+    return row
+
+
+def delete_contact(user_id: str, contact_id: str) -> None:
+    sb = get_supabase_admin()
+    sb.table("kwami_contacts").delete().eq("id", contact_id).eq("user_id", user_id).execute()
+
+
 def ensure_conversation(
     *,
     user_id: str,

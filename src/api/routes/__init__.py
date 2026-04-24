@@ -3,6 +3,7 @@
 from . import (
     admin_reconciliation,
     channels,
+    contacts,
     credits,
     health,
     internal,
@@ -24,6 +25,7 @@ __all__ = [
     "credits",
     "admin_reconciliation",
     "channels",
+    "contacts",
     "internal",
     "webhooks",
 ]
