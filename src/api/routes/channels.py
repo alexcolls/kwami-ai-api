@@ -481,7 +481,12 @@ async def send_outbound_message(
     if not channel:
         raise HTTPException(status_code=404, detail="No WhatsApp channel configured for this kwami")
 
-    from_address = channel.get("provider_sender") or settings.twilio_whatsapp_from
+    raw_sender = (channel.get("provider_sender") or settings.twilio_whatsapp_from or "").strip()
+    if raw_sender and not raw_sender.startswith("whatsapp:"):
+        # Accept bare E.164 numbers in config and coerce to Twilio WhatsApp format.
+        from_address = f"whatsapp:{raw_sender}"
+    else:
+        from_address = raw_sender
     if not from_address:
         raise HTTPException(status_code=503, detail="No WhatsApp sender is configured")
 
@@ -506,22 +511,53 @@ async def send_outbound_message(
         metadata={"channelKind": "whatsapp"},
     )
 
-    message = send_whatsapp_message(
-        from_address=from_address,
-        to_address=f"whatsapp:{to_number}",
-        body=request.body.strip(),
-    )
-    event = create_message_event(
-        conversation_id=conversation["id"],
-        channel_id=channel["id"],
-        contact_id=contact["id"],
-        user_id=user.id,
-        kwami_id=request.kwami_id,
-        direction="outbound",
-        provider_message_sid=message["sid"],
-        provider_status=message["status"],
-        from_address=message["from"],
-        to_address=message["to"],
-        body=request.body.strip(),
-    )
+    try:
+        message = send_whatsapp_message(
+            from_address=from_address,
+            to_address=f"whatsapp:{to_number}",
+            body=request.body.strip(),
+        )
+        event = create_message_event(
+            conversation_id=conversation["id"],
+            channel_id=channel["id"],
+            contact_id=contact["id"],
+            user_id=user.id,
+            kwami_id=request.kwami_id,
+            direction="outbound",
+            provider_message_sid=message["sid"],
+            provider_status=message["status"],
+            from_address=message["from"],
+            to_address=message["to"],
+            body=request.body.strip(),
+        )
+    except Exception as exc:
+        error_code, error_message = extract_twilio_error(exc)
+        create_message_event(
+            conversation_id=conversation["id"],
+            channel_id=channel["id"],
+            contact_id=contact["id"],
+            user_id=user.id,
+            kwami_id=request.kwami_id,
+            direction="outbound",
+            provider_message_sid=None,
+            provider_status="failed",
+            from_address=from_address,
+            to_address=f"whatsapp:{to_number}",
+            body=request.body.strip(),
+            error_code=error_code,
+            error_message=error_message,
+            provider_payload={"error": str(exc)},
+        )
+        if error_code == "63007":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "WhatsApp sender is not available in Twilio. "
+                    "Set an approved sender (for example whatsapp:+...) in this channel."
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail=error_message or str(exc),
+        ) from exc
     return {"message": event, "conversationId": conversation["id"]}
