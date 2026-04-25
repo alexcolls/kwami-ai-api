@@ -123,6 +123,20 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
 
+    # Wallet / Solana
+    wallet_network: str = Field(default="mainnet-beta", alias="WALLET_NETWORK")
+    wallet_enabled: bool = Field(default=False, alias="WALLET_ENABLED")
+    wallet_custody_provider: str = Field(default="mock", alias="WALLET_CUSTODY_PROVIDER")
+    wallet_custody_signing_secret: str | None = Field(
+        default=None,
+        alias="WALLET_CUSTODY_SIGNING_SECRET",
+    )
+    wallet_webhook_secret: str | None = Field(default=None, alias="WALLET_WEBHOOK_SECRET")
+    wallet_card_provider_base_url: str = Field(
+        default="https://buy-provider.example.com",
+        alias="WALLET_CARD_PROVIDER_BASE_URL",
+    )
+
     # Kwami API key (shared secret between agent and API for usage reporting)
     kwami_api_key: str | None = Field(default=None, alias="KWAMI_API_KEY")
 

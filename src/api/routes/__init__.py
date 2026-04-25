@@ -11,6 +11,7 @@ from . import (
     memory,
     models,
     token,
+    wallet,
     voices,
     webhooks,
 )
@@ -27,5 +28,6 @@ __all__ = [
     "channels",
     "contacts",
     "internal",
+    "wallet",
     "webhooks",
 ]

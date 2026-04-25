@@ -21,6 +21,7 @@ from src.api.routes import (
     memory,
     models,
     token,
+    wallet,
     voices,
     webhooks,
 )
@@ -93,6 +94,7 @@ app.include_router(languages.router, prefix="/languages", tags=["Languages"])
 app.include_router(credits.router, prefix="/credits", tags=["Credits"])
 app.include_router(channels.router, prefix="/channels", tags=["Channels"])
 app.include_router(contacts.router, prefix="/contacts", tags=["Contacts"])
+app.include_router(wallet.router, prefix="/wallets", tags=["Wallets"])
 app.include_router(email.router, prefix="/email", tags=["Email"])
 app.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
 app.include_router(internal.router, prefix="/internal", tags=["Internal"])
