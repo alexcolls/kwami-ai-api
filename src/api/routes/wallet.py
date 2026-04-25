@@ -43,6 +43,7 @@ class FundingIntentRequest(BaseModel):
     amount: Decimal
     amount_usd: Decimal | None = Field(default=None, alias="amountUsd")
     sender_wallet_pubkey: str | None = Field(default=None, alias="senderWalletPubkey")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
 
 
 class AllowlistTokenRequest(BaseModel):
@@ -97,6 +98,7 @@ async def create_phantom_funding_intent(
             amount=request.amount,
             amount_usd=request.amount_usd,
             sender_wallet_pubkey=request.sender_wallet_pubkey,
+            idempotency_key=request.idempotency_key,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -120,6 +122,7 @@ async def create_card_funding_intent(
             amount=request.amount,
             amount_usd=request.amount_usd,
             sender_wallet_pubkey=request.sender_wallet_pubkey,
+            idempotency_key=request.idempotency_key,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

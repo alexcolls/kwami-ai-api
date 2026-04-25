@@ -17,6 +17,7 @@ from src.services.custody_service import CustodyError, custody_service
 logger = logging.getLogger("kwami-api.wallet")
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
+SUPPORTED_FUNDING_PROVIDERS = {"phantom_transfer", "card_provider"}
 
 
 def _now_iso() -> str:
@@ -67,6 +68,12 @@ def _fetch_allowlist(user_id: str) -> list[dict[str, Any]]:
         row for row in rows
         if row.get("is_default") or row.get("created_by_user_id") in (None, user_id)
     ]
+
+
+def _is_allowed_mint(user_id: str, mint_address: str) -> bool:
+    allowlist = _fetch_allowlist(user_id)
+    wanted = mint_address.strip()
+    return any(row.get("mint_address") == wanted for row in allowlist)
 
 
 def _compute_credit_amount(amount: Decimal, amount_usd: Decimal | None) -> int:
@@ -169,12 +176,19 @@ async def add_custom_allowlist_token(
     decimals: int,
     is_stablecoin: bool,
 ) -> dict[str, Any]:
+    mint = mint_address.strip()
+    symbol_norm = symbol.strip().upper()
+    if len(mint) < 20:
+        raise ValueError("Invalid mint address")
+    if not symbol_norm or len(symbol_norm) > 12:
+        raise ValueError("Invalid token symbol")
+
     sb = get_supabase_admin()
     payload = {
         "id": str(uuid.uuid4()),
         "chain": "solana",
-        "mint_address": mint_address.strip(),
-        "symbol": symbol.strip().upper(),
+        "mint_address": mint,
+        "symbol": symbol_norm,
         "decimals": decimals,
         "is_stablecoin": bool(is_stablecoin),
         "is_default": False,
@@ -196,15 +210,36 @@ async def create_funding_intent(
     amount: Decimal,
     amount_usd: Decimal | None,
     sender_wallet_pubkey: str | None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
+    if provider not in SUPPORTED_FUNDING_PROVIDERS:
+        raise ValueError("Unsupported funding provider")
+    if amount <= 0:
+        raise ValueError("Funding amount must be greater than zero")
+    if not _is_allowed_mint(user_id, asset_mint):
+        raise ValueError("Token mint is not allowlisted")
+
     wallet = _fetch_wallet(user_id, kwami_id)
     if not wallet:
         raise ValueError("Create a wallet before funding")
 
     sb = get_supabase_admin()
+    idem_key = (idempotency_key or "").strip()
+    if not idem_key:
+        idem_input = f"{user_id}:{kwami_id}:{provider}:{asset_mint}:{amount}:{_now_iso()}"
+        idem_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
+
+    existing = (
+        sb.table("wallet_funding_intents")
+        .select("*")
+        .eq("idempotency_key", idem_key)
+        .limit(1)
+        .execute()
+    ).data or []
+    if existing:
+        return existing[0]
+
     intent_id = str(uuid.uuid4())
-    idem_input = f"{user_id}:{kwami_id}:{provider}:{asset_mint}:{amount}:{_now_iso()}"
-    idempotency_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
     redirect_url = None
     if provider == "card_provider":
@@ -224,7 +259,7 @@ async def create_funding_intent(
         "destination_wallet_pubkey": wallet["public_key"],
         "provider_intent_id": None,
         "provider_redirect_url": redirect_url,
-        "idempotency_key": idempotency_key,
+        "idempotency_key": idem_key,
         "expires_at": expires_at,
         "metadata": {"network": settings.wallet_network},
         "created_at": _now_iso(),
@@ -261,6 +296,8 @@ async def settle_funding_intent(
     provider: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    if provider not in SUPPORTED_FUNDING_PROVIDERS:
+        raise ValueError("Unsupported funding provider")
     intent_id = str(payload.get("intent_id", "")).strip()
     if not intent_id:
         raise ValueError("intent_id is required")

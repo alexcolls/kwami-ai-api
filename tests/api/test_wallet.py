@@ -51,6 +51,47 @@ async def test_get_wallet_overview_endpoint(auth_client, monkeypatch):
     assert response.json()["wallet"]["kwami_id"] == "kwami-1"
 
 
+@pytest.mark.anyio
+async def test_create_funding_intent_passes_idempotency(auth_client, monkeypatch):
+    captured = {}
+
+    async def fake_create_funding_intent(
+        user_id: str,
+        *,
+        kwami_id: str,
+        provider: str,
+        asset_mint: str,
+        asset_symbol: str,
+        amount,
+        amount_usd,
+        sender_wallet_pubkey,
+        idempotency_key=None,
+    ):
+        captured["idempotency_key"] = idempotency_key
+        return {
+            "id": "intent-1",
+            "provider": provider,
+            "status": "pending",
+            "asset_symbol": asset_symbol,
+            "expected_amount": str(amount),
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr("src.api.routes.wallet.create_funding_intent", fake_create_funding_intent)
+
+    response = await auth_client.post(
+        "/wallets/kwamis/kwami-1/fund/phantom-intent",
+        json={
+            "assetMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "assetSymbol": "USDC",
+            "amount": 10,
+            "idempotencyKey": "idem-123",
+        },
+    )
+    assert response.status_code == 200
+    assert captured["idempotency_key"] == "idem-123"
+
+
 def test_wallet_webhook_signature_verification():
     payload = json.dumps({"intent_id": "intent-1"}).encode("utf-8")
     secret = "wallet-secret-test"

@@ -21,6 +21,14 @@ def _default_credits_fail_open() -> bool:
     return os.environ.get("APP_ENV", "development") != "production"
 
 
+def _default_wallet_enabled() -> bool:
+    """Enable wallets by default outside production unless explicitly configured."""
+    value = os.environ.get("WALLET_ENABLED")
+    if value is not None:
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("APP_ENV", "development") != "production"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -125,7 +133,10 @@ class Settings(BaseSettings):
 
     # Wallet / Solana
     wallet_network: str = Field(default="mainnet-beta", alias="WALLET_NETWORK")
-    wallet_enabled: bool = Field(default=False, alias="WALLET_ENABLED")
+    wallet_enabled: bool = Field(
+        default_factory=_default_wallet_enabled,
+        alias="WALLET_ENABLED",
+    )
     wallet_custody_provider: str = Field(default="mock", alias="WALLET_CUSTODY_PROVIDER")
     wallet_custody_signing_secret: str | None = Field(
         default=None,
