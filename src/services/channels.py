@@ -225,6 +225,23 @@ def find_channel_by_address(address: str) -> dict[str, Any] | None:
     return None
 
 
+def find_channel_by_kind_and_address(kind: str, address: str) -> dict[str, Any] | None:
+    sb = get_supabase_admin()
+    for field in ("provider_sender", "phone_number"):
+        result = (
+            sb.table("kwami_channels")
+            .select("*")
+            .eq("kind", kind)
+            .eq(field, address)
+            .limit(1)
+            .execute()
+        )
+        row = _single(result)
+        if row:
+            return row
+    return None
+
+
 def ensure_contact(
     *,
     user_id: str,

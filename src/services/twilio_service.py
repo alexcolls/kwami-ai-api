@@ -276,6 +276,31 @@ def send_whatsapp_message(
     }
 
 
+def send_sms_message(
+    *,
+    from_number: str,
+    to_number: str,
+    body: str,
+) -> dict[str, str | None]:
+    ensure_twilio_enabled()
+    client = get_twilio_client()
+    message = client.messages.create(
+        from_=from_number,
+        to=to_number,
+        body=body,
+        status_callback=webhook_url(
+            "/webhooks/twilio/whatsapp/status",
+            explicit=settings.twilio_messaging_status_callback_url,
+        ),
+    )
+    return {
+        "sid": message.sid,
+        "status": message.status,
+        "from": message.from_,
+        "to": message.to,
+    }
+
+
 def build_voice_bridge_response(*, livekit_uri: str, headers: dict[str, str]) -> str:
     """Return TwiML that bridges the PSTN call into LiveKit SIP."""
     response = VoiceResponse()

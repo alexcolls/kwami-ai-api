@@ -41,6 +41,7 @@ from src.services.twilio_service import (
     purchase_phone_number,
     release_incoming_phone_number,
     search_available_numbers,
+    send_sms_message,
     send_whatsapp_message,
 )
 
@@ -88,6 +89,7 @@ class OutboundMessageRequest(BaseModel):
     to_number: str = Field(alias="toNumber")
     body: str
     channel_id: str | None = Field(default=None, alias="channelId")
+    channel_kind: str = Field(default="whatsapp", alias="channelKind")
 
 
 @router.get("/kwamis/{kwami_id}")
@@ -199,9 +201,30 @@ async def purchase_kwami_phone_number(
         provider_sender=f"whatsapp:{phone_number}",
         livekit_outbound_trunk_id=settings.livekit_sip_outbound_trunk_id,
     )
+    sms_channel = upsert_channel(
+        user_id=user.id,
+        kwami_id=request.kwami_id,
+        kind="sms",
+        phone_number=phone_number,
+        display_name=request.display_name or kwami.get("name"),
+        country_code=request.country_code,
+        status="active",
+        capabilities={"sms": True},
+        metadata={
+            "note": "SMS sender linked to this kwami phone line.",
+            "sharedInfrastructure": {
+                "phoneProvisionedByPlatform": True,
+                "routingStrategy": "provider_webhooks",
+            },
+        },
+        provider_channel_sid=str(purchase.get("sid") or ""),
+        provider_sender=phone_number,
+        livekit_outbound_trunk_id=settings.livekit_sip_outbound_trunk_id,
+    )
     return {
         "voiceChannel": voice_channel,
         "whatsappChannel": whatsapp_channel,
+        "smsChannel": sms_channel,
         "sharedInfrastructure": shared_infra_sync,
     }
 
@@ -473,24 +496,37 @@ async def send_outbound_message(
 
     get_owned_kwami(user.id, request.kwami_id)
     to_number = normalize_phone_number(request.to_number, settings.twilio_phone_country)
+    channel_kind = (request.channel_kind or "whatsapp").strip().lower()
+    if channel_kind not in {"whatsapp", "sms"}:
+        raise HTTPException(status_code=400, detail="channelKind must be 'whatsapp' or 'sms'")
+
     channel = (
         get_channel(user.id, request.channel_id)
         if request.channel_id
-        else get_channel_by_kind(user.id, request.kwami_id, "whatsapp")
+        else get_channel_by_kind(user.id, request.kwami_id, channel_kind)
     )
     if not channel:
+        if channel_kind == "sms":
+            raise HTTPException(status_code=404, detail="No SMS channel configured for this kwami")
         raise HTTPException(status_code=404, detail="No WhatsApp channel configured for this kwami")
 
-    raw_sender = (channel.get("provider_sender") or settings.twilio_whatsapp_from or "").strip()
-    if raw_sender and not raw_sender.startswith("whatsapp:"):
-        # Accept bare E.164 numbers in config and coerce to Twilio WhatsApp format.
-        from_address = f"whatsapp:{raw_sender}"
+    if channel_kind == "whatsapp":
+        raw_sender = (channel.get("provider_sender") or settings.twilio_whatsapp_from or "").strip()
+        if raw_sender and not raw_sender.startswith("whatsapp:"):
+            # Accept bare E.164 numbers in config and coerce to Twilio WhatsApp format.
+            from_address = f"whatsapp:{raw_sender}"
+        else:
+            from_address = raw_sender
+        if not from_address:
+            raise HTTPException(status_code=503, detail="No WhatsApp sender is configured")
+        to_address = f"whatsapp:{to_number}"
     else:
-        from_address = raw_sender
-    if not from_address:
-        raise HTTPException(status_code=503, detail="No WhatsApp sender is configured")
+        from_address = str(channel.get("phone_number") or "").strip()
+        if not from_address:
+            raise HTTPException(status_code=503, detail="No SMS sender is configured")
+        to_address = to_number
 
-    if channel["status"] not in {"active", "sandbox"}:
+    if channel_kind == "whatsapp" and channel["status"] not in {"active", "sandbox"}:
         raise HTTPException(
             status_code=409,
             detail="WhatsApp sender is not ready. Complete Twilio/Meta setup first.",
@@ -500,7 +536,7 @@ async def send_outbound_message(
         user_id=user.id,
         kwami_id=request.kwami_id,
         phone_number=to_number,
-        whatsapp_address=f"whatsapp:{to_number}",
+        whatsapp_address=f"whatsapp:{to_number}" if channel_kind == "whatsapp" else None,
     )
     conversation = ensure_conversation(
         user_id=user.id,
@@ -508,15 +544,22 @@ async def send_outbound_message(
         channel_id=channel["id"],
         kind="whatsapp",
         contact_id=contact["id"],
-        metadata={"channelKind": "whatsapp"},
+        metadata={"channelKind": channel_kind},
     )
 
     try:
-        message = send_whatsapp_message(
-            from_address=from_address,
-            to_address=f"whatsapp:{to_number}",
-            body=request.body.strip(),
-        )
+        if channel_kind == "sms":
+            message = send_sms_message(
+                from_number=from_address,
+                to_number=to_address,
+                body=request.body.strip(),
+            )
+        else:
+            message = send_whatsapp_message(
+                from_address=from_address,
+                to_address=to_address,
+                body=request.body.strip(),
+            )
         event = create_message_event(
             conversation_id=conversation["id"],
             channel_id=channel["id"],
@@ -542,13 +585,13 @@ async def send_outbound_message(
             provider_message_sid=None,
             provider_status="failed",
             from_address=from_address,
-            to_address=f"whatsapp:{to_number}",
+            to_address=to_address,
             body=request.body.strip(),
             error_code=error_code,
             error_message=error_message,
             provider_payload={"error": str(exc)},
         )
-        if error_code == "63007":
+        if channel_kind == "whatsapp" and error_code == "63007":
             raise HTTPException(
                 status_code=409,
                 detail=(

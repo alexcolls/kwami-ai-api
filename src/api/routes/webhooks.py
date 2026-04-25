@@ -1,4 +1,4 @@
-"""Twilio voice/WhatsApp and SendGrid email webhooks."""
+"""Twilio voice/messages and SendGrid email webhooks."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from src.services.channels import (
     ensure_contact,
     ensure_conversation,
     find_channel_by_address,
+    find_channel_by_kind_and_address,
     get_owned_kwami,
     maybe_normalize_phone_number,
     update_call_event_status,
@@ -131,18 +132,25 @@ async def twilio_whatsapp_webhook(request: Request):
     to_address = payload.get("To") or ""
     from_address = payload.get("From") or ""
     body = payload.get("Body") or ""
-    channel = find_channel_by_address(to_address)
+    is_whatsapp = to_address.startswith("whatsapp:") or from_address.startswith("whatsapp:")
+    channel_kind = "whatsapp" if is_whatsapp else "sms"
+    if is_whatsapp:
+        channel = find_channel_by_kind_and_address("whatsapp", to_address)
+    else:
+        to_e164 = maybe_normalize_phone_number(to_address, settings.twilio_phone_country) or to_address
+        channel = find_channel_by_kind_and_address("sms", to_e164) or find_channel_by_address(to_e164)
     if not channel:
-        logger.warning("Inbound WhatsApp message for unknown sender: %s", to_address)
+        logger.warning("Inbound %s message for unknown sender: %s", channel_kind, to_address)
         return Response(build_message_ack_response("This sender is not configured."), media_type="application/xml")
 
-    contact_number = maybe_normalize_phone_number(from_address.replace("whatsapp:", ""), settings.twilio_phone_country)
+    raw_contact_address = from_address.replace("whatsapp:", "")
+    contact_number = maybe_normalize_phone_number(raw_contact_address, settings.twilio_phone_country)
     contact = ensure_contact(
         user_id=channel["user_id"],
         kwami_id=channel["kwami_id"],
-        phone_number=contact_number or from_address,
+        phone_number=contact_number or raw_contact_address or from_address,
         display_name=payload.get("ProfileName"),
-        whatsapp_address=from_address,
+        whatsapp_address=from_address if is_whatsapp else None,
     )
     conversation = ensure_conversation(
         user_id=channel["user_id"],
@@ -151,7 +159,7 @@ async def twilio_whatsapp_webhook(request: Request):
         kind="whatsapp",
         contact_id=contact["id"],
         external_thread_id=from_address,
-        metadata={"source": "twilio_whatsapp"},
+        metadata={"source": "twilio_whatsapp" if is_whatsapp else "twilio_sms", "channelKind": channel_kind},
     )
     create_message_event(
         conversation_id=conversation["id"],
@@ -170,10 +178,16 @@ async def twilio_whatsapp_webhook(request: Request):
     )
 
     kwami = get_owned_kwami(channel["user_id"], channel["kwami_id"])
-    ack_text = (
-        f"{kwami.get('name') or 'Kwami'} received your message. "
-        "WhatsApp is connected, and an automated reply pipeline can now be layered on top of this thread."
-    )
+    if is_whatsapp:
+        ack_text = (
+            f"{kwami.get('name') or 'Kwami'} received your message. "
+            "WhatsApp is connected, and an automated reply pipeline can now be layered on top of this thread."
+        )
+    else:
+        ack_text = (
+            f"{kwami.get('name') or 'Kwami'} received your SMS. "
+            "SMS is connected for this number."
+        )
     return Response(build_message_ack_response(ack_text), media_type="application/xml")
 
 
