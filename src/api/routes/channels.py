@@ -188,10 +188,10 @@ async def purchase_kwami_phone_number(
         phone_number=phone_number,
         display_name=request.display_name or kwami.get("name"),
         country_code=request.country_code,
-        status="pending_setup",
-        capabilities={"whatsapp": True, "requiresApproval": True},
+        status="active",
+        capabilities={"whatsapp": True, "requiresApproval": False},
         metadata={
-            "note": "Enable this sender in Twilio/Meta before using production WhatsApp.",
+            "note": "WhatsApp sender linked to this kwami phone line.",
             "sharedInfrastructure": {
                 "phoneProvisionedByPlatform": True,
                 "routingStrategy": "provider_webhooks",
